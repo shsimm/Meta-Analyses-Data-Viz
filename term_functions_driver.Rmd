@@ -1,0 +1,494 @@
+---
+title: "term_functions"
+author: "Shu'ayb Simmons"
+date: "2023-02-04"
+output: html_document
+---
+
+Shu'ayb's frequently used functions; used across all factor levels! 
+
+
+######################## META-ANALYSIS functions
+```{r cmc_meta_analysis -- function to conduct a meta-analysis}
+
+# 2 arguments
+# 1 -- Takes a list of genes with their t-stat + lfc from either cohort
+# 2 -- vector of genes (remember they must be shared across cohort)
+
+# Will return a dataframe of genes w FDR, gene names, descriptions, & LFC
+# parallel processing to speed things up (;
+
+start_time <- Sys.time()
+cmc_meta_analysis <- function(meta_mega, genes){
+  cl <- parallel::makeCluster(parallel::detectCores() - 1) 
+  doParallel::registerDoParallel(cl)
+  significant_genes <- foreach::foreach(gene = genes, 
+                                        .combine = rbind, 
+                                        .packages = c("metafor", 
+                                                      "dplyr", 
+                                                      "doParallel")) %dopar% {
+        subset_penn_pitt <- meta_mega$`MSSM-Penn-Pitt` %>% 
+          filter(gene_id == gene)
+          subset_NIMH_HBCC <- meta_mega$`NIMH-HBCC` %>% 
+            filter(gene_id == gene)
+              yi <- c(subset_penn_pitt$logFC_PPM, subset_NIMH_HBCC$logFC_NIMH)
+              sei <- c(subset_penn_pitt$logFC_PPM / subset_penn_pitt$t_PPM,
+                       subset_NIMH_HBCC$logFC_NIMH / subset_NIMH_HBCC$t_NIMH)
+          meta_gene <- metafor::rma(yi,sei,method="FE", weighted=TRUE, 
+                                    data=meta_mega)
+      result <- coef(summary(meta_gene))
+      return (data.frame(gene_name=gene, p_val=result$pval, 
+                         beta=result$estimate))
+  }
+stopCluster(cl) #stopping the cluster
+  
+# Clean up the edition numbers
+significant_genes$gene_name <- sub("\\.\\d+", "", significant_genes$gene_name)
+  # Perform a multiple comparisons correction 
+  significant_genes <- significant_genes %>%
+    dplyr::mutate(p.adj = p.adjust(p_val, method = "fdr")) %>%
+    dplyr::arrange(p.adj)
+# get the hgnc_symbol
+    meta_genelist <- useMart(dataset = "hsapiens_gene_ensembl", biomart = "ensembl") %>%
+      getBM(filters = "ensembl_gene_id", 
+        attributes = c("ensembl_gene_id", "hgnc_symbol",
+                       "description", "gene_biotype"),
+          values = significant_genes$gene_name) %>%
+dplyr::rename(gene_name = ensembl_gene_id)
+
+significant_genes <- dplyr::left_join(meta_genelist, significant_genes, 
+                                 by = "gene_name") %>%
+dplyr::select(hgnc_symbol, description, everything())
+  
+significant_genes = significant_genes %>% 
+  dplyr::rename(logFC = beta , P.Value = p_val, adj.P.Val = p.adj)
+
+end_time <- Sys.time()
+cat("Time taken to complete: ", end_time - start_time)
+return(significant_genes)
+}
+
+```
+
+
+
+######################## VOLCANO PLOTTING (log base 10) 
+```{r make_volcano_plot_race}
+
+# 3 arguments 
+# 1 -- Data frame with P-val, FDR and logFC
+# 2 -- x limit for your graph
+# 3 -- y limit for your graph
+
+make_volcano_plot_race <- function(X, x_lim, y_lim) {
+
+  
+  X = DE_mega_race
+  
+X$direction <- "NO"
+X$direction[X$logFC < -0.25 & X$adj.P.Val < 0.05] <- "DOWN"
+X$direction[X$logFC > 0.25 & X$adj.P.Val < 0.05] <- "UP"
+
+volcano_plot <- ggplot(data=X, aes(x=logFC, y=-log10(P.Value),
+  fill = direction, color = direction, label=hgnc_symbol)) +
+    geom_point() + theme_bw() + 
+    scale_color_manual(values=c("blue", "black", "red")) +
+   # geom_vline(xintercept=c(-0.25, 0.25), color = "orange", linetype = "longdash") +
+  theme(legend.position="none") + 
+  # geom_hline(yintercept=-log10(0.05), color = "orange", linetype = "longdash") + 
+My_Theme +
+ylab('-Log10(p-val)') + xlim(x_lim) + ylim(y_lim) + xlab("Log2FC")
+
+volcano_plot
+
+
+      top_50_genes_above_zero <- X %>%
+        dplyr::filter(gene_biotype == "protein_coding") %>%
+        dplyr::filter(adj.P.Val < 0.05 & logFC > 1.3) %>% dplyr::arrange(desc(logFC)) %>%
+      dplyr::slice_head(n = 75)
+
+  top_50_genes_below_zero <- X %>%
+    dplyr::filter(gene_biotype == "protein_coding") %>%
+    dplyr::filter(adj.P.Val < 0.05 & logFC < -1.1) %>% dplyr::arrange(logFC) %>%
+  dplyr::slice_head(n = 27)
+  
+  top_50_genes <- rbind(top_50_genes_above_zero, top_50_genes_below_zero)
+  print(top_50_genes)
+  
+volcano_plot_named <- volcano_plot +
+  geom_text_repel(data=top_50_genes,
+    aes(label=hgnc_symbol, hjust = ifelse(logFC > 0, 1, -0.3),
+     nudge_x = ifelse(logFC > 0, 2, -2)),
+    colour = "black",
+  max.overlaps = 12, force = 14, force_pull = 10, max.time = 15,
+box.padding = 0.72, point.padding = 2, 
+                    segment.curvature = -0.1, segment.linetype = 1,
+                    segment.angle = 20, arrow = arrow(
+      length = unit(0.01, "npc"), type = "closed", ends = "last"))
+  return(volcano_plot_named)
+}
+
+```
+
+```{r make_volcano_plot_dx}
+
+make_volcano_plot_dx <- function(X, x_lim, y_lim) {
+  
+X$direction <- "NO"
+X$direction[X$logFC < -0.25 & X$adj.P.Val < 0.05] <- "DOWN"
+X$direction[X$logFC > 0.25 & X$adj.P.Val < 0.05] <- "UP"
+
+      volcano_plot <- ggplot(data=X, aes(x=logFC, y=-log10(P.Value),
+        fill = direction, color = direction, label=hgnc_symbol)) +
+          geom_point() + theme_bw() + 
+        scale_color_manual(values=c("blue", "black", "red")) +
+    #  geom_vline(xintercept=c(-0.25, 0.25), 
+                   # color = "orange", linetype = "longdash") +
+        theme(legend.position="none") + 
+      #  geom_hline(yintercept=-log10(0.05), 
+                 #  color = "orange", linetype = "longdash") + 
+        My_Theme +
+      ylab('-Log10(p-val)') + xlim(x_lim) + ylim(y_lim) + xlab("Log2FC")
+
+      top_50_genes_above_zero <- X %>%
+        dplyr::filter(gene_biotype == "protein_coding") %>%
+        dplyr::filter(adj.P.Val < 0.05 & logFC > 0.25) %>% dplyr::arrange(desc(logFC)) %>%
+      dplyr::slice_head(n = 10)
+
+  top_50_genes_below_zero <- X %>%
+    dplyr::filter(gene_biotype == "protein_coding") %>%
+    dplyr::filter(adj.P.Val < 0.05 & logFC < 0.25) %>% dplyr::arrange(logFC) %>%
+  dplyr::slice_head(n = 10)
+  
+  top_50_genes <- rbind(top_50_genes_above_zero, top_50_genes_below_zero)
+  print(top_50_genes)
+  
+volcano_plot_named <- volcano_plot +
+  geom_text_repel(data=top_50_genes,
+    aes(label=hgnc_symbol, hjust = ifelse(logFC > 0, 1, -0.3),
+     nudge_x = ifelse(logFC > 0, 2, -2)),
+    colour = "black",
+  max.overlaps = 13, force = 14, force_pull = 18, max.time = 15,
+box.padding = 0.8, point.padding = 2, 
+                    segment.curvature = -0.1, segment.linetype = 1,
+                    segment.angle = 20, arrow = arrow(
+      length = unit(0.01, "npc"), type = "closed", ends = "last"))
+return(volcano_plot_named)
+
+}
+
+```
+
+```{r make_volcano_plot_interaction}
+
+make_volcano_plot_interaction <- function(X, x_lim, y_lim) {
+X$direction <- "NO"
+X$direction[X$logFC < -0.25 & X$adj.P.Val < 0.05] <- "DOWN"
+X$direction[X$logFC > 0.25 & X$adj.P.Val < 0.05] <- "UP"
+
+      volcano_plot <- ggplot(data=X, aes(x=logFC, y=-log10(P.Value),
+        fill = direction, color = direction, label=hgnc_symbol)) +
+          geom_point() + theme_bw() + 
+        scale_color_manual(values=c("black")) +
+        theme(legend.position="none") + 
+        My_Theme +
+      ylab('-Log10(p-val)') + xlim(x_lim) + ylim(y_lim) + xlab("Log2FC")
+
+      df <- X %>%
+        dplyr::filter(hgnc_symbol == "NGFR")
+ 
+volcano_plot_named <- volcano_plot +
+  geom_text_repel(data=df,
+    aes(label=hgnc_symbol, hjust = ifelse(logFC > 0, 1, -0.3),
+     nudge_x = ifelse(logFC > 0, 2, -2)),
+    colour = "black",
+  max.overlaps = 13, force = 14, force_pull = 18, max.time = 15,
+box.padding = 0.8, point.padding = 2, 
+                    segment.curvature = -0.1, segment.linetype = 1,
+                    segment.angle = 20, arrow = arrow(
+      length = unit(0.01, "npc"), type = "closed", ends = "last"))
+return(volcano_plot_named)
+}
+
+```
+
+```{r make_volcano_plot_CTRA}
+
+make_volcano_plot_CTRA <- function(X, x_lim, y_lim) {
+  
+X$direction <- "NO"
+X$direction[X$logFC < -0.25 & X$adj.P.Val < 0.05] <- "DOWN"
+X$direction[X$logFC > 0.25 & X$adj.P.Val < 0.05] <- "UP"
+
+      volcano_plot <- ggplot(data=X, aes(x=logFC, y=-log10(P.Value),
+        fill = direction, color = direction, label=hgnc_symbol)) +
+          geom_point() + theme_bw() + 
+        scale_color_manual(values=c("blue", "black", "red")) +
+        theme(legend.position="none") + 
+        My_Theme +
+      ylab('-Log10(p-val)') + xlim(x_lim) + ylim(y_lim) + xlab("Log2FC")
+      
+      print(volcano_plot)
+
+      df <- X %>%
+        dplyr::filter(gene_biotype == "protein_coding") %>%
+        dplyr::filter(adj.P.Val < 0.05 & abs(logFC) > 0.25) %>% dplyr::arrange(desc(logFC)) %>%
+      dplyr::slice_head(n = 10)
+  
+volcano_plot_named <- volcano_plot +
+  geom_text_repel(data=df,
+    aes(label=hgnc_symbol, hjust = ifelse(logFC > 0, 1, -0.3),
+     nudge_x = ifelse(logFC > 0, 2, -2)),
+    colour = "black",
+  max.overlaps = 7, force = 20, force_pull = 20, max.time = 15,
+box.padding = 1, point.padding = 1, 
+                    segment.curvature = -0.1, segment.linetype = 1,
+                    segment.angle = 20, arrow = arrow(
+      length = unit(0.01, "npc"), type = "closed", ends = "last"))
+
+return(volcano_plot_named)
+}
+
+```
+
+
+
+######################## CLEANING RESIDUAL DATAFRAMES
+```{r clean_dataframe_nimh -- cleans NIMH residuals}
+
+# This function cleans nimh residuals into 4 columns ; Cohort, Gene_Id, Res_count, and Sample ID
+
+# 1 argument -- a data frame with row = gene & column = sample
+
+clean_dataframe_nimh <- function(df, sample_id_colname = "SampleID", 
+                                 gene_id_colname = "Gene_ID", 
+                                 res_counts_colname = "Res_counts"){
+  # Pivot the data frame
+  df <- df %>% tibble::rownames_to_column(gene_id_colname) %>% 
+    tidyr::pivot_longer(cols = 2:268, names_to = sample_id_colname, values_to = res_counts_colname) %>%
+    dplyr::select(gene_id_colname, sample_id_colname, res_counts_colname)
+  df$Gene_ID <- sub("\\.\\d+", "", df$Gene_ID)
+  # Remove the prefix at the beginning of Samples - this is MUCH faster than gsub
+  df <- df %>% 
+    transform(sample_id_colname = stringr::str_replace(sample_id_colname,"NIMH.HBCC.",""))
+    df$Cohort<- "NIMH-HBCC"
+    df = df %>% dplyr::select(-sample_id_colname)
+  return(df)
+}
+
+```
+
+```{r clean_dataframe_ppm -- cleans PPM residuals}
+
+## Ibid ^^
+
+clean_dataframe_ppm <- function(df, sample_id_colname = "SampleID", gene_id_colname = "Gene_ID", res_counts_colname = "Res_counts"){
+  # Pivot the data frame
+  df <- df %>% tibble::rownames_to_column(gene_id_colname) %>% 
+    tidyr::pivot_longer(cols = 2:513, names_to = sample_id_colname, values_to = res_counts_colname) %>%
+    dplyr::select(gene_id_colname, sample_id_colname, res_counts_colname)
+  df$Gene_ID <- sub("\\.\\d+", "", df$Gene_ID)
+  df <- df %>% transform(sample_id_colname = stringr::str_replace(sample_id_colname,"MSSM.Penn.Pitt.",""))
+  df = df %>% dplyr::select(-sample_id_colname)
+  df$Cohort<- "MSSM-Penn-Pitt"
+  return(df)
+}
+
+```
+
+
+
+
+######################## RESIDUAL PLOTTING
+```{r plot_gene_residuals_by_race}
+
+# Plots residual counts of genes you want to see
+# 3 arguments 
+#1 -- data frame with ethnicity, residual counts (after matrix multiplication), Cohort 
+#2 -- theme you want (establish one beforehand)
+#3 -- Color palette you want (this should be a vector of two)
+
+plot_gene_residuals_by_race <- function(df, theme, fill_values) {
+  race_gene_residuals <- ggplot(df, aes(x = Ethnicity, y = Res_counts, fill = Ethnicity)) +
+    geom_violin(size = 1) +
+    theme_bw() +
+    theme(legend.position = "none") +
+    ylab ('Expression Residuals') +
+    xlab ('Reported Race') +
+    scale_fill_manual(values = fill_values) 
+
+  race_gene_residuals_stat <- race_gene_residuals + 
+    geom_boxplot(color = "black", fill = "gray", alpha = 0.9, width = 0.1, size = 0.3, outlier.size = 5) + 
+    facet_grid(Cohort ~ Gene_ID, scales = "free_y") + 
+    theme(strip.text.x = element_text(size = 11.5, color = "Black"),
+          strip.text.y = element_text(size = 11, color = "Black"),
+          axis.title.x = element_text(size = 14),
+          axis.text.y = element_text(size = 11),
+          axis.text.x = element_text(size = 12),
+          axis.title.y = element_text(size = 12)) 
+  
+  genes_res_race <- race_gene_residuals_stat + 
+    stat_summary(fun = "median", color = "blue", size = 2, geom = "point") 
+
+  genes_res_race
+}
+
+```
+
+
+
+
+######################## ONTOLOGY ENRICHMENT ANALYSES
+```{r directional_GO_analysis -- this is the full blown directional analysis}
+
+# This function creates a directional ontology of the top 15 up and down enriched pathways 
+
+# 2 arguments
+# 1 -- data frame with hgnc_symbols (i.e., gene names) ; this should be your DE list
+# 2 -- logFC threshold you want to set 
+
+directional_GO_analysis <- function(X, LFC_threshold) {
+
+  My_Ontology_Theme = theme(
+  axis.title.x = element_text(size = 16),
+  axis.text.y = element_text(size = 14),
+  axis.text.x = element_text(size = 14),
+  axis.title.y = element_text(size = 16))
+  
+# UP-REGULATED GENES
+  race_mega_ontology_df_UP <- X %>% dplyr::filter(adj.P.Val < 0.05 & logFC > LFC_threshold)
+  gp_mega_UP <- gprofiler2::gost(race_mega_ontology_df_UP$hgnc_symbol, organism = "hsapiens", ordered_query = FALSE,
+                  multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                  measure_underrepresentation = FALSE, evcodes = TRUE, 
+                  user_threshold = 0.05, correction_method = "g_SCS", 
+                  domain_scope = "annotated", custom_bg = NULL, 
+                  numeric_ns = "", sources = NULL)
+        gp_mega_race_UP <- gp_mega_UP$result
+        # Create the Data frame of top pathways
+        top_mega_race_UP <- head(arrange(gp_mega_race_UP, p_value), 15)
+        top_mega_race_UP  <- top_mega_race_UP %>% tibble::add_column(Direction = "UP") %>% arrange(p_value)
+      # Add this column to transform p-value directionality
+      top_mega_race_UP$logtrans <- -log10(top_mega_race_UP$p_value)
+      # Sort by decreasing value
+    ontology_plot_mega_UP <- ggplot(data=top_mega_race_UP, aes(x=reorder(term_name,+ -log10(p_value)), y=logtrans)) + 
+    geom_col() + theme_classic() + coord_flip() + labs(x = "Gene Ontology Pathway", y = "-Log10(P-Value)")
+print(ontology_plot_mega_UP)
+    
+# DOWN-REGULATED GENES
+race_mega_ontology_df_DOWN <- X %>% dplyr::filter(adj.P.Val < 0.05 & logFC < -LFC_threshold)
+  gp_mega_DOWN <- gprofiler2::gost(race_mega_ontology_df_DOWN$hgnc_symbol, organism = "hsapiens", ordered_query = FALSE, 
+                  multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                  measure_underrepresentation = FALSE, evcodes = TRUE, 
+                  user_threshold = 0.05, correction_method = "g_SCS", 
+                  domain_scope = "annotated", custom_bg = NULL, 
+                  numeric_ns = "", sources = NULL)
+    gp_mega_race_DOWN <- gp_mega_DOWN$result
+    top_mega_race_DOWN <- head(arrange(gp_mega_race_DOWN, p_value), 15)
+    top_mega_race_DOWN <- top_mega_race_DOWN %>% tibble::add_column(Direction = "DOWN") %>% arrange(p_value)
+    top_mega_race_DOWN$log
+  top_mega_race_DOWN$logtrans <- log10(top_mega_race_DOWN$p_value)
+  ontology_plot_mega_DOWN <- ggplot(data=top_mega_race_DOWN, aes(x=reorder(term_name, - log10(p_value)), y=logtrans)) +
+geom_col() + theme_classic() + coord_flip() + labs(x = "Gene Ontology Pathway", y = "-Log10(P-Value)")
+print(ontology_plot_mega_DOWN)
+
+# DIRECTIONAL FRAME
+top_mega_race_ontology <- as.data.frame(rbind(top_mega_race_UP, top_mega_race_DOWN))
+top_mega_race_ontology = top_mega_race_ontology #%>% dplyr::distinct(term_name, .keep_all = TRUE)
+
+ontology_plot_mega <- ggplot(data=top_mega_race_ontology, 
+                             aes(x=reorder(term_name,+ logtrans), 
+                                 y=as.numeric(logtrans), fill = Direction)) + 
+  geom_col() + scale_fill_manual(values = c("blue", "red")) + coord_flip() +
+  theme_classic() + geom_hline(yintercept=0, col="black", size =1, linetype = "longdash") +
+labs(y = "Enrichment Score -Log10(P-val), Directional", 
+     x = "Ontology Pathway") + theme(legend.position = c(0.9, 0.2)) + My_Ontology_Theme
+
+print(ontology_plot_mega) 
+
+  return(list(UP = as.data.frame(gp_mega_race_UP), DOWN = as.data.frame(gp_mega_race_DOWN)))
+}
+
+
+```
+
+```{r analyze_ontology -- this is a quick ontology analysis that gives lists}
+
+analyze_ontology <- function(df) {
+  
+      df1 <- gprofiler2::gost(df$., organism = "hsapiens", ordered_query = FALSE,
+                                    multi_query = FALSE, significant = TRUE, exclude_iea = FALSE, 
+                                    measure_underrepresentation = FALSE, evcodes = TRUE, 
+                                    user_threshold = 0.05, correction_method = "g_SCS", 
+                                    domain_scope = "annotated", custom_bg = NULL, 
+                                    numeric_ns = "", sources = NULL)
+      df2 <- as.data.frame(df1$result)
+  
+  return(df2)
+}
+
+```
+
+```{r runGOAnalysis -- this is the full-blown hierarchal analysis}
+
+runGOAnalysis <- function(df) {
+  # Load the org.Hs.eg.db and DOSE packages
+  library(org.Hs.eg.db)
+  library(DOSE)
+  # Run the hierarchical ontology
+  simMatrix <- rrvgo::calculateSimMatrix(df$term_id,
+                                          orgdb="org.Hs.eg.db", 
+                                          ont="BP",
+                                          method="Rel")
+    # Set the scores
+    scores <- setNames(-log10(df$p_value), df$term_id)
+    # Reduce simMatrix and plot
+    reducedTerms <- reduceSimMatrix(simMatrix,
+                                    scores,
+                                    threshold=0.7,
+                                    orgdb="org.Hs.eg.db")
+return(treemapPlot(reducedTerms))
+
+}
+
+```
+
+
+
+
+######################## VENN ANALYSES
+```{r draw_venn -- conducts a venn diagram}
+
+# This function creates a 4way venn
+
+# 3 arguments
+# 1 -- data frame of genes
+# 2 -- list of concatenated category names
+# 3 -- the size of the set you want
+
+# the seed: 20210302
+draw_venn <- function(X, category_names, set_size) {
+  
+  # Set the seed
+  # The set. seed() function in R is used to create reproducible results when writing code that involves creating variables that take on random values
+ set.seed(20210419)
+
+  fourway_venn <- ggVennDiagram(X, 
+                                label = "count", 
+                                set_size = set_size,
+                                edge_size = 1,
+                                category.names = category_names) +  
+   ggplot2::scale_fill_gradient(low = "#CBC3E3", 
+                                high = "#f7c7c7") + 
+    theme_void() + scale_x_continuous(expand = expansion(mult = .2)) + theme(legend.position = "none")
+  
+  return(fourway_venn)
+}
+
+
+
+```
+
+
+
+
+

@@ -1,0 +1,315 @@
+---
+title: "limma_interaction"
+author: "Shu'ayb Simmons"
+date: "2022-12-05"
+output: html_document
+editor_options: 
+chunk_output_type: inline
+---
+
+######################## Set up for the analysis
+```{r Load required packages}
+library('viridis')
+library('ggstatsplot')
+library('RColorBrewer')
+library('metafor')
+library('plyr') # DO NOT USE THIS IN CONJUCTION WITH DPLYR
+library('biomaRt')
+library('ggrepel')
+library('ggbeeswarm')
+library('patchwork')
+library("gprofiler2")
+library("biomaRt")
+library("reshape2")
+library("ggVennDiagram")
+library("ggh4x")
+```
+
+```{r Create Plot themes}
+
+My_Inter_Theme = theme(
+  axis.title.x = element_text(size = 12),
+  axis.text.y = element_text(size = 12),
+  axis.text.x = element_text(size = 12),
+  axis.title.y = element_text(size = 12))
+
+```
+
+
+
+
+######################## Concordance Analysis
+```{r Signature of Interaction}
+
+#### DEG across Race * Dx
+DEG_PPM_interaction <- data.frame(DE[[1]])
+DEG_NIMH_interaction <- data.frame(DE[[2]])
+
+sig_ppm <- DEG_PPM_interaction %>% dplyr::filter(adj.P.Val < 0.05)
+sig_nimh <- DEG_NIMH_interaction %>% dplyr::filter(adj.P.Val < 0.05)
+
+interaction_NIMH <- DEG_NIMH_interaction %>% rename_at("t",~"NIMH_t")
+interaction_PPM <- DEG_PPM_interaction %>% rename_at("t",~"PPM_t")
+
+cmc_interaction_cohort <- inner_join(interaction_NIMH, interaction_PPM, by = "ensembl_gene_id")
+corr_cmc_interaction_cohort <- cor.test(cmc_interaction_cohort$NIMH_t, cmc_interaction_cohort$PPM_t, method = "spearman")
+corr_cmc_interaction_cohort
+
+cohort_interaction_reg <- lm(NIMH_t ~ PPM_t, data = cmc_interaction_cohort)
+summary(cohort_interaction_reg)
+
+corr_interaction_cohort <- ggplot(cmc_interaction_cohort , aes(x = NIMH_t, y=PPM_t)) + 
+    theme_bw() +
+    geom_vline(xintercept=0, col="black", linetype = "longdash") +
+        geom_hline(yintercept=0, col="black", linetype = "longdash") +
+        ylim(-4,4) +
+            xlim(-4,4) + 
+            geom_abline(slope = 1, col ='red') +
+        xlab('NIMH-HBCC test-statistic') +
+        ylab('MSSM-Penn-Pitt test-statistic') +
+    ggpointdensity::geom_pointdensity(adjust = 1, size = 0.5 , alpha = 3) +
+           scale_color_viridis(option = 'cividis') + 
+    geom_density_2d(linewidth = 0.25, colour = "black") +
+    geom_smooth(method='lm', formula= y~x, color = "orange") +
+labs(colour = "Density") +
+geom_abline(slope = 1) +
+stat_cor(method = "spearman", color = 'red', size = 5) + 
+My_Theme +
+theme(legend.position = c(0.94, 0.25)) +
+  guides(shape = guide_legend(override.aes = list(size = 0.5)))
+
+corr_interaction_cohort 
+#ggsave("corr_interaction_cohort.png",  width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Interaction")
+
+```
+
+
+
+######################## Mega-Analysis
+```{r Get the Mega df}
+
+DE_mega_interaction = DE_mega
+
+# write.csv(DE_mega_interaction, "~/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Data Frames/DEG/Interaction\\DE_mega_interaction.csv",row.names = FALSE)
+
+```
+
+```{r Volcano Plot Mega-analysis}
+
+volcano_mega_interaction <- make_volcano_plot_interaction(DE_mega_interaction, x_lim = c(-0.25, 0.25), y_lim = c(0,5))
+volcano_mega_interaction
+
+ggsave('volcano_mega_interaction.png', path = "~/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Interaction/Mega-Analysis")
+
+```
+
+
+
+
+
+######################## Meta-Analysis
+```{r Create the DE lists}
+
+# Clean up the data frames and add columns denoting the Cohort + select the columns of interest
+DEG_NIMH_interaction$Cohort <- "NIMH"
+meta_NIMH_interaction <- DEG_NIMH_interaction %>% 
+  dplyr::rename(logFC_NIMH = logFC, t_NIMH = t , hgnc_symbol_NIMH = hgnc_symbol) %>%
+  dplyr::select('logFC_NIMH','t_NIMH', 'hgnc_symbol_NIMH', 'description', 'gene_id', 'Cohort')
+
+DEG_PPM_interaction$Cohort <- "PPM"
+meta_PPM_interaction <- DEG_PPM_interaction %>% 
+  dplyr::rename('logFC_PPM' = 'logFC', 't_PPM' = 't', 'hgnc_symbol_PPM' = 'hgnc_symbol') %>% 
+  dplyr::select('logFC_PPM','t_PPM', 'hgnc_symbol_PPM', 'gene_id', 'Cohort')
+
+meta_mega_interaction <- list(meta_NIMH_interaction, meta_PPM_interaction)
+names(meta_mega_interaction) <- c("NIMH-HBCC", "MSSM-Penn-Pitt")
+genes_interaction <- meta_mega_interaction$`NIMH-HBCC`$gene_id %>% unique()
+
+```
+
+```{r Meta-Analysis}
+
+gene_names_interaction_meta <- cmc_meta_analysis(meta_mega_interaction,
+                                                 genes_interaction)
+colnames(gene_names_interaction_meta)
+
+```
+
+```{r Volcano Plot Meta-analysis}
+
+gene_names_dx_meta$Sig<- "NO"
+gene_names_dx_meta$Sig[gene_names_dx_meta$p.adj < 0.05] <- "YES"
+
+volcano_meta_dx <- ggplot(data=gene_names_dx_meta, aes(x=beta, y=-log10(p_val),
+                                               fill = Sig, color = Sig,
+                                               label=hgnc_symbol)) +
+geom_point() + 
+  theme_bw() + 
+      scale_color_manual(values=c("black", "blue")) +
+      geom_vline(xintercept=c(-0.5, 0.5),color = "orange", linetype = "longdash") + 
+          theme(legend.position="none") +
+        geom_hline(yintercept=-log10(0.05), color = "orange", linetype = "longdash") + 
+    ylab('Log10(p-val)') + 
+  xlim(-1.5, 1.5) +ylim(0, 3) + 
+xlab("Log2FC") + 
+My_Theme
+
+volcano_meta_dx_named <- volcano_meta_dx + 
+  geom_text_repel(data=filter(gene_names_dx_meta, p_val<0.05), 
+                                     aes(label=hgnc_symbol), colour = "black")
+
+print(volcano_meta_dx_named)
+#ggsave("volcano_meta_named.png", path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Dx/Meta-Analysis")
+```
+
+
+
+
+
+######################## Residual Count Plots Analysis
+```{r Create the vectors of dx in NIMH & PPM -- we have race from the race term}
+
+# This is a vector of SCZ and control samples in NIMH-HBCC
+scz_people_NIMH <- METADATA %>% dplyr::filter(Dx == "SCZ" & Cohort == "NIMH-HBCC")
+  scz_samples_NIMH <- c(scz_people_NIMH$SampleID)
+control_people_NIMH <- METADATA %>% dplyr::filter(Dx == "Control" & Cohort == "NIMH-HBCC")
+  control_samples_NIMH <- c(control_people_NIMH$SampleID)  
+  
+# This is a vector of SCZ and control samples in PPM
+scz_people_PPM <- METADATA %>% dplyr::filter(Dx == "SCZ" & Cohort == "MSSM-Penn-Pitt")
+  scz_samples_PPM <- c(scz_people_PPM$SampleID) 
+control_people_PPM <- METADATA %>% dplyr::filter(Dx == "Control" & Cohort == "MSSM-Penn-Pitt")
+  control_samples_PPM <- c(control_people_PPM$SampleID)  
+  
+```
+
+```{r Get the residual data frames in NIMH & PPM}
+
+# These are the corrected residuals for the interaction term 
+residuals_interaction_PPM_raw <- as.data.frame(resid.add$Dx_Ethnicity$`MSSM-Penn-Pitt`)
+residuals_interaction_NIMH_raw <- as.data.frame(resid.add$Dx_Ethnicity$`NIMH-HBCC`)
+
+```
+
+```{r Clean the residual interaction list in NIMH-HBCC }
+
+# Pivot the data frame of NIMH residuals
+residuals_interaction_NIMH = residuals_interaction_NIMH_raw %>% 
+  tibble::rownames_to_column("Gene_ID") %>% 
+  tidyr::pivot_longer(cols = 2:268, names_to = "Sample_ID", values_to = "Res_counts") %>%
+  dplyr::select('Gene_ID', 'Sample_ID', 'Res_counts')
+
+# Remove the prefix at the beginning of Samples - this is MUCH faster than gsub
+residuals_interaction_NIMH = residuals_interaction_NIMH %>% 
+  transform(Sample_ID=stringr::str_replace(Sample_ID,"NIMH.HBCC.",""))
+
+#residuals_interaction_NIMH$Cohort <- "NIMH-HBCC"
+meta_interaction_res = METADATA %>% dplyr::rename_at("SampleID",~"Sample_ID")
+
+meta_interaction_frame = dplyr::left_join(meta_interaction_res, residuals_interaction_NIMH, by = "Sample_ID")
+meta_interaction_frame$Gene_ID <- sub("\\.\\d+", "", meta_interaction_frame$Gene_ID)
+plot_frame = meta_interaction_frame %>% 
+  mutate(Ethnicity = dplyr::recode(Ethnicity, AA = "Black", C = "White"))
+
+```
+
+```{r Clean the residual interaction list in MSSM-Penn-Pitt }
+
+# Pivot the data frame of NIMH residuals
+residuals_interaction_PPM = residuals_interaction_PPM_raw %>% 
+  tibble::rownames_to_column("Gene_ID") %>% 
+  tidyr::pivot_longer(cols = 2:513, names_to = "Sample_ID", values_to = "Res_counts") %>%
+  dplyr::select('Gene_ID', 'Sample_ID', 'Res_counts')
+
+residuals_interaction_PPM = residuals_interaction_PPM %>% 
+  transform(Sample_ID=stringr::str_replace(Sample_ID,"MSSM.Penn.Pitt.",""))
+ 
+#residuals_interaction_NIMH$Cohort <- "NIMH-HBCC"
+meta_interaction_res_ppm = METADATA %>% dplyr::rename_at("SampleID",~"Sample_ID")
+
+meta_interaction_frame_ppm = dplyr::left_join(meta_interaction_res_ppm, 
+                                              residuals_interaction_PPM, 
+                                              by = "Sample_ID")
+meta_interaction_frame_ppm$Gene_ID <- sub("\\.\\d+", "", meta_interaction_frame_ppm$Gene_ID)
+plot_frame_ppm = meta_interaction_frame_ppm %>% 
+  mutate(Ethnicity = dplyr::recode(Ethnicity, AA = "Black", C = "White"))
+
+```
+
+```{r Plot residuals of a gene across interaction, across cohort}
+
+colnames(plot_frame_ppm)
+colnames(plot_frame)
+
+plot_all <- rbind(plot_frame_ppm, plot_frame) %>% 
+  filter(Gene_ID %in% c("ENSG00000064300"#,"ENSG00000197258"
+                        )) %>% 
+  mutate(Gene_ID = recode(Gene_ID, 
+                          ENSG00000064300 = "NGFR"#,ENSG00000197258 = "EIF4BP6"
+                         ))
+
+
+plot_all$Ethnicity <- factor(plot_all$Ethnicity, levels = c("White", "Black"))
+ 
+plot_inter_genes <- ggplot(plot_all, aes(x = Dx, y = log2(Res_counts), fill = Ethnicity)) + 
+geom_violin(size = 0.5) +
+  theme_bw() +
+    theme(legend.position = "none") +
+    ylab ('Expression Residuals') +
+  xlab ('Diagnosis') +
+scale_fill_manual(values=c("#D3D3D3", "#4F4F4F"))
+
+inter_gene_residuals_stat <- plot_inter_genes + 
+  geom_boxplot(color="black",fill = 'gray', 
+               alpha=0.9, width=0.1, size = 0.3, outlier.size=5)  + 
+  # look at the faacet free 
+ggh4x::facet_nested(Cohort ~ Gene_ID + Ethnicity, scales="free_y") + My_Theme + 
+theme(strip.text.x = element_text(size = 13, colour = "Black"),
+      strip.text.y = element_text(size = 11, colour = "Black")) +
+  #theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+theme(text = element_text(size = 12))         
+
+genes_res_inter <- inter_gene_residuals_stat + 
+  stat_summary(fun = "median", colour = "blue", size = 2, geom = "point")
+
+genes_res_inter
+
+ggsave("genes_res_inter.png", width = 6, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Interaction/Mega-Analysis")
+
+```
+
+
+
+
+######################## Ancestry vs Race Plots Analysis
+```{r Plot the EV.1 across self-reported race}
+
+plot_all$Gene_ID <- factor(plot_all$Gene_ID, levels = c("NGFR", "EIF4BP6"))
+
+plot_inter_genes_ancestry <- ggplot(plot_all, aes(x = EV.1, y = log2(Res_counts), 
+                                                  fill = Ethnicity, 
+                                                  color = Ethnicity)) + 
+geom_jitter(size = 0.5) +
+  theme_bw() +
+    theme(legend.position = "none") +
+    ylab ('Expression Residuals') +
+  xlab ('Genetic Ancestry Score') +
+scale_fill_manual(values=c("#4F4F4F", "#D3D3D3")) + 
+scale_color_manual(values=c("#4F4F4F", "#D3D3D3"))
+
+inter_gene_residuals_stat_ancestry <- plot_inter_genes_ancestry + 
+facet_nested(Cohort ~ Gene_ID + Dx, scales="free_y") + My_Theme + 
+theme(strip.text.x = element_text(size = 13, colour = "Black"),
+      strip.text.y = element_text(size = 11, colour = "Black")) +
+theme(text = element_text(size = 12)) 
+
+inter_gene_residuals_stat_ancestry 
+
+#ggsave("inter_gene_residuals_stat_ancestry.png", width = 6, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Interaction/Mega-Analysis")
+
+```
+
+
+
+
+

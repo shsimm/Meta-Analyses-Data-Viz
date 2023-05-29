@@ -1,0 +1,312 @@
+---
+title: "limma_dx.Rmd"
+author: "Shu'ayb Simmons"
+date: "2022-12-05"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+
+# Set up for the analysis
+```{r Required Packages}
+
+library('viridis')
+library('ggstatsplot')
+library('RColorBrewer')
+library('metafor')
+library('plyr')
+library('biomaRt')
+library('ggrepel')
+library('ggbeeswarm')
+library('patchwork')
+library("gprofiler2")
+library("biomaRt")
+library("reshape2")
+library("gghighlight")
+library("rrvgo")
+library("ggVennDiagram")
+library("wesanderson")
+library("parallel")
+library("magrittr")
+library("foreach")
+library("doParallel")
+library("org.Hs.eg.db")
+
+```
+
+
+
+
+# Concordance analysis
+```{r Signature of dx}
+
+#### DEG across Dx
+DEG_PPM_dx <- data.frame(DE[[1]])
+DEG_NIMH_dx <- data.frame(DE[[2]])
+
+
+dx_NIMH <- DEG_NIMH_dx %>% dplyr::rename_at("t",~"NIMH_t")
+dx_PPM <- DEG_PPM_dx %>% dplyr::rename_at("t",~"PPM_t")
+
+cmc_dx_cohort <- inner_join(dx_NIMH, dx_PPM, by = "ensembl_gene_id")
+corr_cmc_dx_cohort <- cor.test(cmc_dx_cohort$NIMH_t, cmc_dx_cohort$PPM_t, method = "spearman")
+corr_cmc_dx_cohort
+
+cohort_dx_reg <- lm(NIMH_t ~ PPM_t, data = cmc_dx_cohort)
+summary(cohort_dx_reg)
+
+corr_dx_cohort <- ggplot(cmc_dx_cohort , aes(x = NIMH_t, y=PPM_t)) + 
+    theme_bw() +
+    geom_vline(xintercept=0, col="black", linetype = "longdash") +
+        geom_hline(yintercept=0, col="black", linetype = "longdash") +
+        ylim(-5,5) +
+            xlim(-5,5) + 
+            geom_abline(slope = 1, col ='red') +
+        xlab('NIMH-HBCC test-statistic') +
+        ylab('MSSM-Penn-Pitt test-statistic') +
+    ggpointdensity::geom_pointdensity(adjust = 1, size = 0.5 , alpha = 3) +
+       scale_color_viridis(option = 'cividis') + 
+    geom_density_2d(linewidth = 0.25, colour = "black") +
+    geom_smooth(method='lm', formula= y~x, color = "orange") +
+labs(colour = "Density") +
+geom_abline(slope = 1) +
+ggpubr::stat_cor(method = "spearman", color = 'red', size = 5) + 
+My_Theme +
+theme(legend.position = c(0.94, 0.25)) +
+  guides(shape = guide_legend(override.aes = list(size = 0.5)))
+  
+corr_dx_cohort 
+#ggsave("corr_dx_cohort.png", path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Dx")
+     
+```
+
+
+
+
+# Mega-Analysis
+```{r Get the Mega df}
+
+DE_mega_dx = DE_mega
+
+#write.csv(DE_mega_dx, "~/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Data Frames/DEG/Dx\\DE_mega_dx.csv",row.names = FALSE)
+
+```
+
+```{r Volcano Plot Mega-analysis}
+
+volcano_mega_dx <- make_volcano_plot_dx(DE_mega_dx, x_lim = c(-1.5, 1.5), y_lim = c(0, 14))
+volcano_mega_dx
+
+#ggsave('volcano_mega_dx_named.png', path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Dx/Mega-Analysis")
+
+```
+
+
+
+
+# Meta-Analysis
+```{r Create the Cohort DE lists}
+
+# Clean up the data frames and add columns denoting the Cohort + select the columns of interest
+DEG_NIMH_dx$Cohort <- "NIMH"
+meta_NIMH_dx <- DEG_NIMH_dx %>% dplyr::rename(logFC_NIMH = logFC, t_NIMH = t , hgnc_symbol_NIMH = hgnc_symbol) %>%
+  dplyr::select('logFC_NIMH','t_NIMH', 'hgnc_symbol_NIMH', 'description', 'gene_id', 'Cohort')
+
+DEG_PPM_dx$Cohort <- "PPM"
+meta_PPM_dx <- DEG_PPM_dx %>% dplyr::rename('logFC_PPM' = 'logFC', 't_PPM' = 't', 'hgnc_symbol_PPM' = 'hgnc_symbol') %>% 
+  dplyr::select('logFC_PPM','t_PPM', 'hgnc_symbol_PPM', 'gene_id', 'Cohort')
+
+```
+
+```{r Meta-Analysis}
+
+meta_mega_dx <- list(meta_NIMH_dx, meta_PPM_dx)
+names(meta_mega_dx) <- c("NIMH-HBCC", "MSSM-Penn-Pitt")
+genes_dx <- meta_mega_dx$`NIMH-HBCC`$gene_id %>% unique()
+
+gene_names_dx_meta <- cmc_meta_analysis(meta_mega_dx, genes_dx)
+
+colnames(gene_names_dx_meta)
+colnames(DE_mega)
+
+```
+
+```{r Volcano Plot Meta-analysis}
+
+gene_names_dx_meta$Sig<- "NO"
+gene_names_dx_meta$Sig[gene_names_dx_meta$p.adj < 0.05] <- "YES"
+
+volcano_meta_dx <- ggplot(data=gene_names_dx_meta, aes(x=beta, y=-log10(p_val),
+                                               fill = Sig, color = Sig,
+                                               label=hgnc_symbol)) +
+geom_point() + 
+  theme_bw() + 
+      scale_color_manual(values=c("black", "blue")) +
+      geom_vline(xintercept=c(-0.5, 0.5),color = "orange", linetype = "longdash") + 
+          theme(legend.position="none") +
+        geom_hline(yintercept=-log10(0.05), color = "orange", linetype = "longdash") + 
+    ylab('Log10(p-val)') + 
+  xlim(-1.5, 1.5) +ylim(0, 3) + 
+xlab("Log2FC") + 
+My_Theme
+
+volcano_meta_dx_named <- volcano_meta_dx + 
+  geom_text_repel(data=filter(gene_names_dx_meta, p_val<0.05), 
+                                     aes(label=hgnc_symbol), colour = "black")
+
+print(volcano_meta_dx_named)
+ggsave("volcano_meta_named.png", path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Dx/Meta-Analysis")
+```
+
+```{r Check Dimesions}
+
+sig_results_dx = gene_names_dx_meta%>% filter(P.Value<0.05)
+sig_results_dx_adj = gene_names_dx_meta %>% filter(adj.P.Val<0.05)
+DEG_NIMH_dx_sig = DEG_NIMH_dx %>% filter(adj.P.Val<0.05)
+DEG_PPM_dx_sig = DEG_PPM_dx %>% filter(adj.P.Val<0.05)
+
+# Compare the sig lists across NIMH, PPM, and the Meta-analysis
+dim(DEG_NIMH_dx_sig)
+dim(DEG_PPM_dx_sig)
+dim(sig_results_dx)
+dim(sig_results_dx_adj)
+
+```
+
+
+
+
+# Venn Analysis
+```{r Create the dataframes}
+
+# Race
+  # Upregulated
+  race_upregulated = DE_mega_race %>% 
+  dplyr::filter(logFC > 0 & adj.P.Val < 0.05) %>% dplyr::filter(!is.na(hgnc_symbol) & hgnc_symbol != "")
+  race_upregulated_genes = as.vector(race_upregulated$hgnc_symbol)
+  range(race_upregulated$logFC, na.rm = FALSE)
+
+  # Downregulated
+  race_downregulated = DE_mega_race %>% 
+    dplyr::filter(logFC < 0 & adj.P.Val < 0.05)%>% dplyr::filter(!is.na(hgnc_symbol) & hgnc_symbol != "")
+  race_downregulated_genes = as.vector(race_downregulated$hgnc_symbol)
+  range(race_downregulated$logFC, na.rm = FALSE)
+  
+# Across Diagnosis
+  # Upregulated
+  dx_upregulated = DE_mega_dx %>% 
+    dplyr::filter(logFC > 0 & adj.P.Val < 0.05) %>% dplyr::filter(!is.na(hgnc_symbol) & hgnc_symbol != "")
+  dx_upregulated_genes = as.vector(dx_upregulated$hgnc_symbol)
+  range(dx_upregulated$logFC, na.rm = FALSE)
+    
+  # Downregulated
+  dx_downregulated = DE_mega_dx %>% 
+    dplyr::filter(logFC < 0 & adj.P.Val < 0.05) %>% dplyr::filter(!is.na(hgnc_symbol) & hgnc_symbol != "")
+  dx_downregulated_genes = as.vector(dx_downregulated$hgnc_symbol)
+  range(dx_downregulated$logFC, na.rm = FALSE)
+
+
+```
+
+```{r Plot the Venn}
+
+# Merge the vectors of genes into a list
+genes_cmc = list(A = race_upregulated_genes,
+                 B = race_downregulated_genes,
+                 C = dx_upregulated_genes,
+                 D = dx_downregulated_genes)
+
+category_names <- c("Up in Black",
+                    "Up in White",
+                    "Up in Dx",
+                    "Up in Ctrl")
+
+
+fourway_venn <- draw_venn(genes_cmc, category_names, 4)
+fourway_venn
+
+ggsave("fourway_venn.png", path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Dx/Mega-Analysis")
+
+```
+
+
+
+
+# Venn Ontology Analysis
+```{r Shared upregulated analysis}
+
+# Intersect the frames we want to compare.
+shared_upregulated <- intersect(race_upregulated$hgnc_symbol, 
+                                dx_upregulated$hgnc_symbol) %>% as.data.frame()
+
+# Run an ontology
+shared_upregulated_ontology <- analyze_ontology(shared_upregulated)
+shared_upregulated_ontology
+
+ontology_shared_up <- shared_upregulated_ontology %>% 
+  dplyr::arrange(p_value)%>% dplyr::filter(p_value < 0.05) %>% 
+  dplyr::slice(1:10)
+
+# Create the log transformation column
+ontology_shared_up$logtrans <- -log10(ontology_shared_up$p_value)
+ontology_shared_up$direction <- "up"
+
+# Create the plot
+ontology_plot_up <- ggplot(ontology_shared_up, aes(x=reorder(term_name, + logtrans), 
+                                y= logtrans)) + geom_col() + theme_classic() + 
+  coord_flip() + labs(x = "Gene Ontology Pathway", y = "-Log10(P-Value)") +
+    labs(y = "Enrichment Score", 
+         x = "Ontology Pathway") + My_Theme  + 
+   # theme(plot.title=element_text(size=45,face="bold")) + 
+  scale_fill_manual(values = c("red"))
+
+ontology_plot_up
+
+ggsave("ontology_plot_up.png", path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Dx/Mega-Analysis", width = 22, height = 16)
+
+```
+
+```{r Shared downregulated analysis}
+
+shared_downregulated <- intersect(race_downregulated$hgnc_symbol,
+                                  dx_downregulated$hgnc_symbol) %>% as.data.frame()
+
+# Run an ontology
+shared_downregulated_ontology <- analyze_ontology(shared_downregulated)
+shared_downregulated_ontology 
+
+ontology_shared_down <- shared_downregulated_ontology  %>% 
+  dplyr::arrange(p_value)%>% dplyr::filter(p_value < 0.05) %>% 
+  dplyr::slice(1:15)
+
+# Create the log transformation column
+ontology_shared_down$logtrans <- -log10(ontology_shared_down$p_value)
+ontology_shared_down$direction <- "down"
+
+ontology_plot_down <- ggplot(ontology_shared_down, aes(x=reorder(term_name, 
+                                                               + logtrans), 
+                                y= logtrans), fill = direction, color = direction) + geom_col() + 
+  theme_classic() + coord_flip() + labs(x = "Gene Ontology Pathway", 
+                                        y = "-Log10(P-Value)") + 
+  labs(y = "Enrichment Score", 
+       x = "Ontology Pathway")+ ggtitle("Downregulated") + My_Dx_Theme  + 
+    theme(plot.title=element_text(size=45,face="bold"))
+
+ontology_plot_down
+
+ggsave("ontology_plot_down.png", path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Dx/Mega-Analysis", width = 22, height = 16)
+
+```
+
+```{r patched plots}
+
+venn_ontology_terms <- ontology_plot_up + ontology_plot_down
+print(venn_ontology_terms) 
+
+ggsave("venn_ontology_terms.png", path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Dx/Mega-Analysis", width = 20, height = 16)
+
+```
+
+

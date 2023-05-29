@@ -1,0 +1,571 @@
+---
+title: "limma_race"
+output: html_document
+date: "2022-10-24"
+---
+
+
+######################## Set up for the analysis
+```{r Required Packages}
+
+library('viridis')
+library('ggstatsplot')
+library('RColorBrewer')
+library('metafor')
+library('dplyr')
+library('biomaRt')
+library('ggrepel')
+library('ggbeeswarm')
+library('patchwork')
+library("gprofiler2")
+library("biomaRt")
+library("reshape2")
+library("gghighlight")
+library("rrvgo")
+library("ggVennDiagram")
+library("wesanderson")
+library("parallel")
+library("magrittr")
+library("foreach")
+library("doParallel")
+library("org.Hs.eg.db")
+
+```
+
+```{r Plot Themes}
+
+My_Theme = theme(
+  axis.title.x = element_text(size = 16),
+  axis.text.y = element_text(size = 14),
+  axis.text.x = element_text(size = 14),
+  axis.title.y = element_text(size = 16))
+
+```
+
+
+
+######################## Concordance Analysis
+```{r Concordance Plot - Cross-Cohort Signature of Race}
+
+#### DEG across Race
+DEG_PPM_race <- data.frame(DE[[1]]) #%>% filter(hgnc_symbol != c('')) 
+DEG_NIMH_race <- data.frame(DE[[2]]) #%>% filter(hgnc_symbol != c('')) 
+
+# WE CANNOT USE THE MODERATED F STATISTIC SO BREAK THE COEFS UP!!
+race_NIMH <- DEG_NIMH_race %>% dplyr::rename_at("t",~"NIMH_t")
+race_PPM <- DEG_PPM_race %>% dplyr::rename_at("t",~"PPM_t")
+
+# Join the tables together
+cmc_race_cohort <- dplyr::inner_join(race_NIMH, race_PPM, by = "ensembl_gene_id")
+# Run the correlation test - be wary of this (reviewer)
+corr_cmc_race_cohort <- cor.test(cmc_race_cohort$NIMH_t, cmc_race_cohort$PPM_t, method = "spearman")
+# See the results
+corr_cmc_race_cohort
+
+cohort_race_reg <- lm(NIMH_t ~ PPM_t, data = cmc_race_cohort)
+summary(cohort_race_reg)
+
+corr_race_cohort <- ggplot(cmc_race_cohort , aes(x = NIMH_t, y=PPM_t)) + 
+    theme_bw() +
+    geom_vline(xintercept=0, col="black", linetype = "longdash") +
+        geom_hline(yintercept=0, col="black", linetype = "longdash") +
+        ylim(-5,5) +
+            xlim(-8,8) + 
+            geom_abline(slope = 1, col ='red') +
+        xlab('NIMH-HBCC test-statistic') +
+        ylab('MSSM-Penn-Pitt test-statistic') +
+    ggpointdensity::geom_pointdensity(adjust = 1, size = 0.5 , alpha = 3) +
+    scale_color_viridis(option = 'cividis') + 
+  geom_density_2d(linewidth = 0.25, colour = "black") +
+  geom_smooth(method='lm', formula= y~x, color = "orange") +
+labs(colour = "Density") +
+scale_fill_continuous(breaks = c(500, 2000)) +  
+guides(colour = guide_colourbar(direction = "vertical")) +
+geom_abline(slope = 1) +
+ggpubr::stat_cor(method = "spearman", color = 'red', size = 5) + 
+My_Theme +
+theme(legend.position = c(0.94, 0.25)) +
+  guides(shape = guide_legend(override.aes = list(size = 0.5)))
+# This only shows the corr 
+# stat_cor(method = "spearman", aes(label = ..r.label..), color = 'red')
+
+#corr_race_cohort_named <- corr_race_cohort + 
+ # geom_text_repel(data=cmc_race_cohort,
+                  #aes(label=hgnc_symbol.x), colour = "black")
+
+corr_race_cohort
+#ggsave("corr_race_cohort.png", width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race")
+     
+```
+
+
+
+######################## Mega - Analysis
+```{r Get the Mega df -- from code}
+
+DE_mega_race = DE_mega
+sig_race = DE_mega %>% dplyr::filter(abs(logFC) > 0.25 & adj.P.Val < 0.05)
+#write.csv(DE_mega_race, "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Data Frames/DEG\\DE_mega_race.csv",row.names=TRUE)
+
+```
+
+```{r Volcano of Mega-Analysis}
+
+volcano_mega_race <- make_volcano_plot_race(DE_mega_race, x_lim = c(-4, 4), y_lim = c(0, 25))
+volcano_mega_race
+
+#ggsave("volcano_mega_race.png", path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis")
+
+```
+
+```{r Volcano of Mega-Analysis CTRA only}
+
+ctra_genes_race <- DE_mega_race %>% dplyr::filter(DE_mega_race$hgnc_symbol %in% ctra)
+
+volcano_mega_race_ctra <- make_volcano_plot_CTRA(ctra_genes_race, x_lim = c(-1, 1), y_lim = c(0, 20))
+volcano_mega_race_ctra 
+
+ggsave("volcano_mega_race_ctra.png", path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis")
+
+```
+
+
+
+######################## Meta - Analysis
+```{r Example of metafor on one gene -- conceptual understanding step}
+
+# have to do the analysis separately for each gene across either cohort
+# remember you can only compare genes that are in BOTH cohorts
+
+# yi is the effect sizes (in this case it is the LFC); vi are the variances
+# sei is the standard error (the measure of change by the t stat) = LFC/t-stat
+
+meta_1 <- metafor::rma(yi = c(DE$`MSSM-Penn-Pitt`$logFC[1],DE$`NIMH-HBCC`$logFC[1]),
+                       sei = c(DE$`MSSM-Penn-Pitt`$logFC[1]/DE$`MSSM-Penn-Pitt`$t[1], 
+                               DE$`NIMH-HBCC`$logFC[1]/DE$`NIMH-HBCC`$t[1]), 
+                       method="FE", weighted=TRUE, data=DE) 
+
+forest(meta_1)
+summary(meta_1)
+
+```
+
+```{r Create the DE frames for the meta-analysis}
+
+# Clean up the data frames and add columns denoting the Cohort + select the columns of interest
+DEG_NIMH_race$Cohort <- "NIMH"
+meta_NIMH <- DEG_NIMH_race %>% 
+  dplyr::rename(logFC_NIMH = logFC, t_NIMH = t , hgnc_symbol_NIMH = hgnc_symbol) %>%
+  dplyr::select('logFC_NIMH','t_NIMH', 'hgnc_symbol_NIMH', 
+                'description', 'gene_id', 'Cohort')
+
+DEG_PPM_race$Cohort <- "PPM"
+meta_PPM <- DEG_PPM_race %>% 
+  dplyr::rename('logFC_PPM' = 'logFC', 't_PPM' = 't', 
+                'hgnc_symbol_PPM' = 'hgnc_symbol') %>% 
+  dplyr::select('logFC_PPM','t_PPM', 
+                'hgnc_symbol_PPM', 'gene_id', 'Cohort')
+
+# Turn the dataframes into a list
+meta_mega <- list(meta_NIMH, meta_PPM)
+names(meta_mega) <- c("NIMH-HBCC", "MSSM-Penn-Pitt")
+genes <- meta_mega$`NIMH-HBCC`$gene_id #%>% unique()
+
+```
+
+```{r Meta-analysis}
+
+gene_names_race_meta <- cmc_meta_analysis(meta_mega, genes)
+
+colnames(gene_names_race_meta)
+colnames(DE_mega)
+
+```
+
+```{r Meta-anlaysis volcano plot}
+
+# Run the function
+volcano_meta_race <- make_volcano_plot_race(gene_names_race_meta, x_lim = c(-2, 2), y_lim = c(0, 6))
+volcano_meta_race
+
+# This is a data frame of the top 50 up and downregulated genes
+meta_race_genes <- as.data.frame(volcano_meta_race$plot_env$top_50_genes)
+
+#ggsave("volcano_meta_race.png", path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race")
+
+```
+
+
+
+######################## DEG list check
+```{r DEG list dimension check -- update when I have time}
+
+sig_results = gene_names_race_meta %>% dplyr::filter(P.Value <0.05)
+sig_results_adj = gene_names_race_meta %>% dplyr::filter(p.adj<0.05)
+DEG_NIMH_race_sig = DEG_NIMH_race %>% dplyr::filter(adj.P.Val<0.05)
+DEG_PPM_race_sig = DEG_PPM_race %>% dplyr::filter(adj.P.Val<0.05)
+DEG_mega_sig = gene_names_race_mega %>% dplyr::filter(adj.P.Val<0.05)
+
+# Compare the sig lists across NIMH, PPM, and the Meta-analysis
+dim(DEG_NIMH_race_sig)
+dim(DEG_PPM_race_sig)
+dim(sig_results)
+dim(sig_results_adj)
+dim(DEG_mega_sig)
+
+```
+
+
+
+######################## Residualized Count Plots Analysis
+```{r Create the vectors of race in NIMH & PPM}
+
+# This is a vector of Black samples in NIMH-HBCC
+black_people_NIMH <- METADATA %>% dplyr::filter(Ethnicity == "AA" & Cohort == "NIMH-HBCC")
+  black_samples_NIMH <- c(black_people_NIMH$SampleID)
+# This is a vector of white samples in NIMH-HBCC
+white_people_NIMH <- METADATA %>% dplyr::filter(Ethnicity == "C" & Cohort == "NIMH-HBCC")
+  white_samples_NIMH <- c(white_people_NIMH$SampleID)
+  
+# This is a vector of Black samples in NIMH-HBCC
+black_people_PPM <- METADATA %>% dplyr::filter(Ethnicity == "AA" & Cohort == "MSSM-Penn-Pitt")
+  black_samples_PPM <- c(black_people_PPM$SampleID)
+# This is a vector of white samples in NIMH-HBCC
+white_people_PPM <- METADATA %>% dplyr::filter(Ethnicity == "C" & Cohort == "MSSM-Penn-Pitt")
+  white_samples_PPM <- c(white_people_PPM$SampleID)
+
+```
+
+```{r Create and clean the residual dfs}
+
+# Clean the data frame for NIMH-HBCC
+residuals_race_NIMH_raw = as.data.frame(resid.add$Ethnicity$`NIMH-HBCC`)
+residuals_race_NIMH_cleaned <- clean_dataframe_nimh(residuals_race_NIMH_raw)
+colnames(residuals_race_NIMH_cleaned)
+
+# Clean the data frame for MSSM-Penn-Pitt
+residuals_race_PPM_raw = as.data.frame(resid.add$Ethnicity$`MSSM-Penn-Pitt`)
+residuals_race_PPM_cleaned <- clean_dataframe_ppm(residuals_race_PPM_raw)
+colnames(residuals_race_PPM_cleaned)
+
+```
+
+```{r Merge the frames and select genes to visualize}
+
+# Rbind the frames together
+all_residuals_race = rbind(residuals_race_NIMH_cleaned, residuals_race_PPM_cleaned) 
+colnames(all_residuals_race)
+
+# left join the metadata to the residual counts by cohort and SampleID
+residuals_met_sheet <- dplyr::left_join(METADATA, all_residuals_race, 
+                                 by = c("SampleID" = "SampleID", 
+                                        "Cohort" = "Cohort")) %>%
+mutate(Ethnicity = dplyr::recode(Ethnicity, AA = "Black", C = "White"))
+
+# Select the genes we're interested in seeing --  make an annotation function!!
+highlighted_genes = c("ENSG00000276070","ENSG00000259823",
+                      "ENSG00000151655","ENSG00000239961")
+plot_all = residuals_met_sheet %>% 
+  dplyr::filter(Gene_ID %in% highlighted_genes) %>%
+  dplyr::mutate(Gene_ID = dplyr::recode(Gene_ID, 
+                                        ENSG00000276070 = "CCL4L2", 
+                                        ENSG00000259823 = "LYPD8",
+                                        ENSG00000151655 = "ITIH2",
+                                        ENSG00000239961 = "LILRA4"))
+  
+```
+
+```{r Plot residuals of race (of select genes) across cohort}
+
+genes_res_race <- plot_gene_residuals_by_race(plot_all, My_Theme, c("#D3D3D3", "#4F4F4F"))
+genes_res_race
+
+ggsave("genes_res_race.png", width = 7, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
+
+```
+
+
+
+######################## Genetic Ancestry Vectors vs Race Plots Analysis
+```{r Plot EV.1 vs residualized Counts}
+
+# Create by factor
+plot_all$Ethnicity <- as.factor(plot_all$Ethnicity)
+plot_all$Ethnicity <- relevel(plot_all$Ethnicity, ref = "White")
+
+ancestry_vs_race <- ggplot(plot_all, 
+                           aes(x = EV.1, y = Res_counts, fill = Ethnicity)) +
+  # EV.1 and ethnicity
+  geom_point(aes(color = Ethnicity), alpha = 0.5) +
+    # Residual Counts and ethnicity
+  #  geom_boxplot(aes(fill = Ethnicity), color = "#4F4F4F", width = 0.3) +
+    xlab('Genetic Ancestry Vector') + ylab('Expression Residuals') +  facet_grid(Cohort ~ Gene_ID, scales = "free_y") +
+  theme_bw() + theme(legend.position = "none") + 
+  scale_color_manual(values = c("#4F4F4F" = "#4F4F4F", "White" = "#D3D3D3")) +
+scale_fill_manual(values = c("#4F4F4F" = "#4F4F4F", "White" = "#D3D3D3")) + 
+      theme(strip.text.x = element_text(size = 11.5, color = "Black"),
+          strip.text.y = element_text(size = 11, color = "Black"),
+          axis.title.x = element_text(size = 11),
+          axis.text.y = element_text(size = 11),
+          axis.text.x = element_text(size = 12),
+          axis.title.y = element_text(size = 11)) 
+
+ancestry_vs_race
+
+#ggsave("ancestry_vs_race.png", width = 6, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
+
+```
+
+
+
+######################## Gene Ontology Enrichment Analysis 
+```{r directional mega-analysis}
+
+# Run the directional ontology analysis
+mega_ontology_race_list <- directional_GO_analysis(DE_mega_race, LFC_threshold = 0.25)
+mega_ontology_race_list
+
+# Create the data frame of terms from the list
+top_mega_race_UP <- as.data.frame(mega_ontology_race_list$UP)
+top_mega_race_DOWN <- as.data.frame(mega_ontology_race_list$DOWN)
+
+#ggsave("mega_ontology_race_list.png", width = 9, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
+
+```
+
+```{r hierarchal mega-analysis}
+
+# Run the hierarchical ontology analysis
+hierarchy_UP <- runGOAnalysis(top_mega_race_UP)
+hierarchy_DOWN <- runGOAnalysis(top_mega_race_DOWN)
+
+```
+
+
+
+######################## Ontology Concordance Analysis [Mega-Analysis Only]
+```{r Immune System Process Genes}
+
+# Clean the data frame up
+immune_system_process$Symbol = toupper(immune_system_process$Symbol)
+
+race_NIMH_immune <- DEG_NIMH_race %>% rename_at("t",~"NIMH_t") %>% filter(hgnc_symbol %in% immune_system_process$Symbol)
+race_PPM_immune <- DEG_PPM_race %>% rename_at("t",~"PPM_t") %>% filter(hgnc_symbol %in% immune_system_process$Symbol)
+
+cmc_race_cohort_immune <- inner_join(race_NIMH_immune,race_PPM_immune, by = "ensembl_gene_id")
+
+corr_race_cohort_immune <- ggplot(cmc_race_cohort, aes(x = NIMH_t, y=PPM_t)) + 
+   geom_point(size=1.5, color="red") + theme_classic() +
+   geom_vline(xintercept=0, col="black", linetype = "longdash") +
+   geom_hline(yintercept=0, col="black", linetype = "longdash") +
+        ylim(-5,5) +
+            xlim(-8,8) + 
+        xlab('NIMH-HBCC test-statistic') +
+        ylab('MSSM-Penn-Pitt test-statistic') +
+  ggtitle('Immune System Process') + 
+guides(colour = guide_colourbar(direction = "vertical")) +
+My_Theme 
+
+named_corr_race_cohort_immune <- corr_race_cohort_immune + geom_text_repel(data=cmc_race_cohort_immune,
+                  aes(label=hgnc_symbol.x), colour = "black") + 
+    stat_cor(method = "spearman", color = 'red', size = 5, aes(label = ..r.label..))
+
+named_corr_race_cohort_immune_highlight <- named_corr_race_cohort_immune +
+        geom_smooth(method='lm', formula= y~x, color = "orange", linetype = "dashed", se = FALSE) +
+  gghighlight::gghighlight(hgnc_symbol.x %in% immune_system_process$Symbol) 
+
+named_corr_race_cohort_immune_highlight 
+
+ggsave("named_corr_race_cohort_immune_highlight.png",width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race")
+
+```
+
+```{r Response to stimulus}
+
+stimulus_genes$Symbol = toupper(stimulus_genes$Symbol)
+
+race_NIMH_stimulus <- DEG_NIMH_race %>% rename_at("t",~"NIMH_t") %>% filter(hgnc_symbol %in% stimulus_genes$Symbol)
+race_PPM_stimulus <- DEG_PPM_race %>% rename_at("t",~"PPM_t") %>% filter(hgnc_symbol %in% stimulus_genes$Symbol)
+
+
+cmc_race_cohort_stimulus <- inner_join(race_NIMH_stimulus, race_PPM_stimulus, by = "ensembl_gene_id")
+
+corr_race_cohort_stimulus <- ggplot(cmc_race_cohort, aes(x = NIMH_t, y=PPM_t)) + 
+   geom_point(size=1.5, color="red") + theme_classic() +
+   geom_vline(xintercept=0, col="black", linetype = "longdash") +
+   geom_hline(yintercept=0, col="black", linetype = "longdash") +
+        ylim(-5,5) +
+            xlim(-8,8) + 
+        xlab('NIMH-HBCC test-statistic') +
+        ylab('MSSM-Penn-Pitt test-statistic') +
+  ggtitle('Response to stimulus') + 
+guides(colour = guide_colourbar(direction = "vertical")) +
+My_Theme 
+
+named_corr_race_cohort_stimulus <- corr_race_cohort_stimulus + 
+  geom_text_repel(data=cmc_race_cohort_stimulus,
+                  aes(label=hgnc_symbol.x), colour = "black")
+
+named_corr_race_cohort_stimulus_highlight <- named_corr_race_cohort_stimulus +
+        geom_smooth(method='lm', formula= y~x, color = "orange", linetype = "dashed", se = FALSE) +
+  stat_cor(method = "spearman", color = 'red', size = 5, aes(label = ..r.label..)) +
+  gghighlight::gghighlight(hgnc_symbol.x %in% stimulus_genes$Symbol) 
+
+
+named_corr_race_cohort_stimulus_highlight
+
+ggsave("named_corr_race_cohort_stimulus_highlight.png", width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race")
+
+```
+
+
+
+######################## Pretin Coding genes across cohort -- this is so weird!
+```{r NIMH-HBCC}
+
+biotype_counts_NIMH <- as.data.frame(table(DEG_NIMH_race$gene_biotype))
+
+biotype_counts_NIMH$Cohort<- "NIMH-HBCC"
+
+# Keep only biotypes with at least 100 genes -- or else it gets messy
+#biotype_counts_NIMH <- biotype_counts_NIMH[biotype_counts_NIMH$Freq >= 100,]
+biotype_counts_NIMH = dplyr::rename(biotype_counts_NIMH, Gene_Biotype = Var1)
+biotype_counts_NIMH = dplyr::rename(biotype_counts_NIMH, Gene_Number = Freq)
+unique(biotype_counts_NIMH$Gene_Biotype)
+
+# Recode the values for better plot graphics  
+biotype_counts_NIMH = biotype_counts_NIMH %>% mutate(Gene_Biotype = recode(Gene_Biotype,
+                               lncRNA = "long-non coding RNA",
+                               processed_pseudogene = "processed pseudogene",
+                               protein_coding = "protein coding",
+                               TEC = "TBD",
+                               transcribed_processed_pseudogene = "transcribed processed pseudogene",
+                               transcribed_unprocessed_pseudogene = "transcribed unproc pseudogene",
+                               unprocessed_pseudogene = "unprocessed pseudogene"))
+biotype_counts_NIMH = biotype_counts_NIMH %>% dplyr::arrange(desc(Gene_Number))
+
+```
+
+```{r Penn-Pitt-MSSM}
+
+biotype_counts_PPM <- as.data.frame(table(DEG_PPM_race$gene_biotype))
+biotype_counts_PPM$Cohort<- "Penn-Pitt-MSSM"
+
+#biotype_counts_PPM <- biotype_counts_PPM[biotype_counts_PPM$Freq >= 100,]
+biotype_counts_PPM = dplyr::rename(biotype_counts_PPM, Gene_Biotype = Var1)
+biotype_counts_PPM = dplyr::rename(biotype_counts_PPM, Gene_Number = Freq)
+unique(biotype_counts_PPM$Gene_Biotype)
+
+# Recode the values for better plot graphics  
+biotype_counts_PPM = biotype_counts_PPM %>% dplyr::mutate(Gene_Biotype = recode(Gene_Biotype,
+                               lncRNA = "long-non coding RNA",
+                               processed_pseudogene = "processed pseudogene",
+                               protein_coding = "protein coding",
+                               TEC = "TBD",
+                               transcribed_processed_pseudogene = "transcribed processed pseudogene",
+                               transcribed_unprocessed_pseudogene = "transcribed unproc pseudogene",
+                               unprocessed_pseudogene = "unprocessed pseudogene"))
+biotype_counts_PPM = biotype_counts_PPM %>% dplyr::arrange(desc(Gene_Number))
+
+```
+
+```{r plotting biotype counts}
+
+biotype_counts = rbind(biotype_counts_NIMH, biotype_counts_PPM)
+
+race_genes_mega_coding <- ggplot(data = biotype_counts) + 
+   geom_col(aes(x=reorder(Gene_Biotype, + Gene_Number), y=Gene_Number, fill = Cohort), 
+            stat = "identity", position = "dodge") + theme_classic() +
+    theme(legend.position = "none") + theme(axis.text.x = element_text(angle = 90)) + 
+  scale_fill_manual(values = c("#9BC53D", "#FFBF00"))+
+  xlab("Gene Biotype") + ylab("Number of genes") 
+
+      
+race_genes_mega_coding
+
+```
+
+
+
+######################## Overlap between reported race and the CTRA
+```{r TwoWayVenn}
+
+# Race
+  # Upregulated
+  race = DE_mega_race %>% 
+  dplyr::filter(adj.P.Val < 0.05) %>% dplyr::filter(!is.na(hgnc_symbol) & hgnc_symbol != "")
+  race = c(race_upregulated$hgnc_symbol)
+  range(race_upregulated$logFC, na.rm = FALSE)
+
+
+
+CTRA <- c("IL1A", "IL1B", "IL6", "IL8", "TNF", "PTGS1", 
+                     "PTGS2", "FOS", "FOSB", "FOSL1", "FOSL2", "JUN", 
+                     "JUNB", "JUND", "NFKB1", "NFKB2", "REL", "RELA", 
+                     "RELB", "GBP1", "IFI16", "IFI27", "IFI27L2", "IFI27L2", "IFI30", "IFI35", 
+                "IFI44", "IFI44L", "IFI6", "IFIH1", "IFIT1","IFIT2", "IFIT3","IFIT5", 
+                "IFIT1L", "IFITM1–3", "IFITM2", "IFITM3", "IFITM4P", "IFITM5", "IFNB1", 
+                "IRF2", "IRF7", "IRF8", "MX1", "MX2", "OAS1", "OAS2", "OAS3", "OASL", "IGJ", "IGLL1", 
+                "IGLL3")  
+
+yo <- intersect(interferon, race_upregulated$hgnc_symbol) 
+  
+# Merge the vectors of genes into a list
+CTRA_race = list(A = race,
+                 B = CTRA)
+
+category_names <- c("Gene Expression Siganature of Race",
+                    "Controlled Transcriptional Response to Adversity (CTRA)")
+
+
+twoway_venn <- draw_venn(CTRA_race, category_names, 2)
+twoway_venn
+
+```
+
+```{r Shared_CTRA_Race}
+
+# Race
+  # Upregulated
+  race_upregulated = DE_mega_race %>% 
+  dplyr::filter(logFC > 0.25 & adj.P.Val < 0.05) %>% dplyr::filter(!is.na(hgnc_symbol) & hgnc_symbol != "")
+  race_upregulated_genes = c(race_upregulated$hgnc_symbol)
+  range(race_upregulated$logFC, na.rm = FALSE)
+
+  # Downregulated
+  race_downregulated = DE_mega_race %>% 
+    dplyr::filter(logFC < -0.25 & adj.P.Val < 0.05)%>% dplyr::filter(!is.na(hgnc_symbol) & hgnc_symbol != "")
+  race_downregulated_genes = c(race_downregulated$hgnc_symbol)
+  range(race_downregulated$logFC, na.rm = FALSE)
+
+proinflammation <- c("IL1A", "IL1B", "IL6", "IL8", "TNF", "PTGS1", 
+                     "PTGS2", "FOS", "FOSB", "FOSL1", "FOSL2", "JUN", 
+                     "JUNB", "JUND", "NFKB1", "NFKB2", "REL", "RELA", 
+                     "RELB")    
+  
+interferon <- c("GBP1", "IFI16", "IFI27", "IFI27L2", "IFI27L2", "IFI30", "IFI35", 
+                "IFI44", "IFI44L", "IFI6", "IFIH1", "IFIT1","IFIT2", "IFIT3","IFIT5", 
+                "IFIT1L", "IFITM1–3", "IFITM2", "IFITM3", "IFITM4P", "IFITM5", "IFNB1", 
+                "IRF2", "IRF7", "IRF8", "MX1", "MX2", "OAS1", "OAS2", "OAS3", "OASL", "IGJ", "IGLL1", 
+                "IGLL3")  
+
+# Merge the vectors of genes into a list
+genes_cmc = list(A = race_upregulated_genes,
+                 B = race_downregulated_genes,
+                 C = proinflammation,
+                 D = interferon)
+
+category_names <- c("Up in Black",
+                    "Up in White",
+                    "Pro-inflammatory (CTRA up)",
+                    "Interferon (CTRA down)")
+
+fourway_venn <- draw_venn(genes_cmc, category_names, 4)
+fourway_venn
+
+ggsave("fourway_venn.png", width = 6, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
+
+```
+
+
+
