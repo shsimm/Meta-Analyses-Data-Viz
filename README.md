@@ -1,4 +1,4 @@
-# Term_Analyses
+# Differential Expression Effect Size Analyses
 
 Differential Expression Analyses 
 
