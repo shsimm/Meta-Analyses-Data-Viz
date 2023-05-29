@@ -1,5 +1,3 @@
 # Differential Expression Effect Size Analyses
 
-Differential Expression Analyses 
-
-These examine the effect sizes of interest
+These examine the effect sizes of interest (_see Differential Expression Analyses for statitical models_)
