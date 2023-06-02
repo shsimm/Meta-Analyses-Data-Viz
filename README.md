@@ -1,6 +1,6 @@
 # Differential Expression Effect Size Analyses
 
-This repository contains the code to examine the effect sizes from stasitical differential expression models from a limma-voom output (_see Differential Expression Analyses for statitical models_)
+This repository contains the code to examine the effect sizes from stasitical differential expression models from a limma-voom output (_see Differential Expression Analyses_) for statistical models
 
 There are **eight** analyses here 
 1) Meta-Analysis Aggregation 
