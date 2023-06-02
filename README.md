@@ -1,14 +1,14 @@
 # Differential Expression Effect Size Analyses
 
-These examine the effect sizes of interest (_see Differential Expression Analyses for statitical models_)
+This repository contains the code to examine the effect sizes from stasitical differential expression models from a limma-voom output (_see Differential Expression Analyses for statitical models_)
 
 There are **eight** analyses here 
-1) meta-analysis aggregation of cohort-sepcific differential expression analyses
-2) volcano plotting of meta-analysis
-3) volcano plotting of mega-analysis
-4) single-gene plotting
-5) gene ontology enrichments
-6) semantic clustering of differentially enriched gene ontologies
+1) Meta-Analysis Aggregation 
+2) Volcano Plotting of Meta-Analysis Results
+3) Volcano Plotting of Mega-Analysis Results
+4) Single-Gene Plotting
+5) Gene Ontology Enrichment Analyses
+6) Semantic Clustering Analyses
 
 There are **four** files here
 1) Analysis of the Gene Expression Signature of Reported Race (limma_race)
