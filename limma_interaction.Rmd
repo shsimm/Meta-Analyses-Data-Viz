@@ -7,13 +7,13 @@ editor_options:
 chunk_output_type: inline
 ---
 
-######################## Set up for the analysis
+######################## Work Space Setup
 ```{r Load required packages}
+
 library('viridis')
 library('ggstatsplot')
 library('RColorBrewer')
 library('metafor')
-library('plyr') # DO NOT USE THIS IN CONJUCTION WITH DPLYR
 library('biomaRt')
 library('ggrepel')
 library('ggbeeswarm')
@@ -23,18 +23,8 @@ library("biomaRt")
 library("reshape2")
 library("ggVennDiagram")
 library("ggh4x")
-```
-
-```{r Create Plot themes}
-
-My_Inter_Theme = theme(
-  axis.title.x = element_text(size = 12),
-  axis.text.y = element_text(size = 12),
-  axis.text.x = element_text(size = 12),
-  axis.title.y = element_text(size = 12))
 
 ```
-
 
 
 
@@ -79,7 +69,6 @@ theme(legend.position = c(0.94, 0.25)) +
   guides(shape = guide_legend(override.aes = list(size = 0.5)))
 
 corr_interaction_cohort 
-#ggsave("corr_interaction_cohort.png",  width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Interaction")
 
 ```
 
@@ -90,8 +79,6 @@ corr_interaction_cohort
 
 DE_mega_interaction = DE_mega
 
-# write.csv(DE_mega_interaction, "~/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Data Frames/DEG/Interaction\\DE_mega_interaction.csv",row.names = FALSE)
-
 ```
 
 ```{r Volcano Plot Mega-analysis}
@@ -99,15 +86,11 @@ DE_mega_interaction = DE_mega
 volcano_mega_interaction <- make_volcano_plot_interaction(DE_mega_interaction, x_lim = c(-0.25, 0.25), y_lim = c(0,5))
 volcano_mega_interaction
 
-ggsave('volcano_mega_interaction.png', path = "~/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Interaction/Mega-Analysis")
-
 ```
 
 
 
-
-
-######################## Meta-Analysis
+######################## Meta-Analysis *requires cohort-specific signatures*
 ```{r Create the DE lists}
 
 # Clean up the data frames and add columns denoting the Cohort + select the columns of interest
@@ -161,8 +144,6 @@ volcano_meta_dx_named <- volcano_meta_dx +
 print(volcano_meta_dx_named)
 #ggsave("volcano_meta_named.png", path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Dx/Meta-Analysis")
 ```
-
-
 
 
 
@@ -274,10 +255,7 @@ genes_res_inter <- inter_gene_residuals_stat +
 
 genes_res_inter
 
-ggsave("genes_res_inter.png", width = 6, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Interaction/Mega-Analysis")
-
 ```
-
 
 
 
@@ -305,10 +283,22 @@ theme(text = element_text(size = 12))
 
 inter_gene_residuals_stat_ancestry 
 
+```
+
+
+
+####################### Save the Plots
+```{r Save the Plots}
+
+#ggsave("corr_interaction_cohort.png", width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Interaction")
+
+#ggsave('volcano_mega_interaction.png', path = "~/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Interaction/Mega-Analysis")
+
+#ggsave("genes_res_inter.png", width = 6, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Interaction/Mega-Analysis")
+
 #ggsave("inter_gene_residuals_stat_ancestry.png", width = 6, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Interaction/Mega-Analysis")
 
 ```
-
 
 
 

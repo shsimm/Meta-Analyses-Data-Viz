@@ -5,7 +5,7 @@ date: "2022-10-24"
 ---
 
 
-######################## Set up for the analysis
+######################## Work Space Setup
 ```{r Required Packages}
 
 library('viridis')
@@ -51,14 +51,14 @@ My_Theme = theme(
 DEG_PPM_race <- data.frame(DE[[1]]) #%>% filter(hgnc_symbol != c('')) 
 DEG_NIMH_race <- data.frame(DE[[2]]) #%>% filter(hgnc_symbol != c('')) 
 
-# WE CANNOT USE THE MODERATED F STATISTIC SO BREAK THE COEFS UP!!
-race_NIMH <- DEG_NIMH_race %>% dplyr::rename_at("t",~"NIMH_t")
-race_PPM <- DEG_PPM_race %>% dplyr::rename_at("t",~"PPM_t")
-
-# Join the tables together
-cmc_race_cohort <- dplyr::inner_join(race_NIMH, race_PPM, by = "ensembl_gene_id")
-# Run the correlation test - be wary of this (reviewer)
-corr_cmc_race_cohort <- cor.test(cmc_race_cohort$NIMH_t, cmc_race_cohort$PPM_t, method = "spearman")
+  race_NIMH <- DEG_NIMH_race %>% dplyr::rename_at("t",~"NIMH_t")
+  race_PPM <- DEG_PPM_race %>% dplyr::rename_at("t",~"PPM_t")
+    # Join the tables together
+    cmc_race_cohort <- dplyr::inner_join(race_NIMH, 
+                                         race_PPM, by = "ensembl_gene_id")
+  # Run the correlation test
+  corr_cmc_race_cohort <- cor.test(cmc_race_cohort$NIMH_t, 
+                                   cmc_race_cohort$PPM_t, method = "spearman")
 # See the results
 corr_cmc_race_cohort
 
@@ -74,64 +74,53 @@ corr_race_cohort <- ggplot(cmc_race_cohort , aes(x = NIMH_t, y=PPM_t)) +
             geom_abline(slope = 1, col ='red') +
         xlab('NIMH-HBCC test-statistic') +
         ylab('MSSM-Penn-Pitt test-statistic') +
-    ggpointdensity::geom_pointdensity(adjust = 1, size = 0.5 , alpha = 3) +
-    scale_color_viridis(option = 'cividis') + 
-  geom_density_2d(linewidth = 0.25, colour = "black") +
-  geom_smooth(method='lm', formula= y~x, color = "orange") +
-labs(colour = "Density") +
-scale_fill_continuous(breaks = c(500, 2000)) +  
-guides(colour = guide_colourbar(direction = "vertical")) +
-geom_abline(slope = 1) +
-ggpubr::stat_cor(method = "spearman", color = 'red', size = 5) + 
-My_Theme +
-theme(legend.position = c(0.94, 0.25)) +
-  guides(shape = guide_legend(override.aes = list(size = 0.5)))
-# This only shows the corr 
-# stat_cor(method = "spearman", aes(label = ..r.label..), color = 'red')
-
-#corr_race_cohort_named <- corr_race_cohort + 
- # geom_text_repel(data=cmc_race_cohort,
-                  #aes(label=hgnc_symbol.x), colour = "black")
+          ggpointdensity::geom_pointdensity(adjust = 1, size = 0.5 , alpha = 3) +
+          scale_color_viridis(option = 'cividis') + 
+        geom_density_2d(linewidth = 0.25, colour = "black") +
+        geom_smooth(method='lm', formula= y~x, color = "orange") +
+      labs(colour = "Density") +
+    scale_fill_continuous(breaks = c(500, 2000)) +  
+    guides(colour = guide_colourbar(direction = "vertical")) +
+  geom_abline(slope = 1) +
+  ggpubr::stat_cor(method = "spearman", color = 'red', size = 5) + My_Theme +
+theme(legend.position = c(0.94, 0.25)) + 
+guides(shape = guide_legend(override.aes = list(size = 0.5)))
 
 corr_race_cohort
-#ggsave("corr_race_cohort.png", width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race")
      
 ```
 
 
 
 ######################## Mega - Analysis
-```{r Get the Mega df -- from code}
+```{r Parse the Mega-Analysis Effect Size}
 
 DE_mega_race = DE_mega
 sig_race = DE_mega %>% dplyr::filter(abs(logFC) > 0.25 & adj.P.Val < 0.05)
-#write.csv(DE_mega_race, "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Data Frames/DEG\\DE_mega_race.csv",row.names=TRUE)
 
 ```
 
 ```{r Volcano of Mega-Analysis}
 
-volcano_mega_race <- make_volcano_plot_race(DE_mega_race, x_lim = c(-4, 4), y_lim = c(0, 25))
+volcano_mega_race <- make_volcano_plot_race(DE_mega_race, x_lim = c(-5, 5), y_lim = c(0, 25))
 volcano_mega_race
-
-#ggsave("volcano_mega_race.png", path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis")
 
 ```
 
 ```{r Volcano of Mega-Analysis CTRA only}
 
-ctra_genes_race <- DE_mega_race %>% dplyr::filter(DE_mega_race$hgnc_symbol %in% ctra)
+# Filter only sig CTRA genes
+ctra_genes_race <- DE_mega_race %>% dplyr::filter(DE_mega_race$hgnc_symbol %in% CTRA)
 
+# Plot the Volcano
 volcano_mega_race_ctra <- make_volcano_plot_CTRA(ctra_genes_race, x_lim = c(-1, 1), y_lim = c(0, 20))
 volcano_mega_race_ctra 
-
-ggsave("volcano_mega_race_ctra.png", path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis")
 
 ```
 
 
 
-######################## Meta - Analysis
+######################## Meta - Analysis *requires cohort-specific signatures*
 ```{r Example of metafor on one gene -- conceptual understanding step}
 
 # have to do the analysis separately for each gene across either cohort
@@ -173,7 +162,7 @@ genes <- meta_mega$`NIMH-HBCC`$gene_id #%>% unique()
 
 ```
 
-```{r Meta-analysis}
+```{r Assess the Meta-analysis Effect Size}
 
 gene_names_race_meta <- cmc_meta_analysis(meta_mega, genes)
 
@@ -197,27 +186,7 @@ meta_race_genes <- as.data.frame(volcano_meta_race$plot_env$top_50_genes)
 
 
 
-######################## DEG list check
-```{r DEG list dimension check -- update when I have time}
-
-sig_results = gene_names_race_meta %>% dplyr::filter(P.Value <0.05)
-sig_results_adj = gene_names_race_meta %>% dplyr::filter(p.adj<0.05)
-DEG_NIMH_race_sig = DEG_NIMH_race %>% dplyr::filter(adj.P.Val<0.05)
-DEG_PPM_race_sig = DEG_PPM_race %>% dplyr::filter(adj.P.Val<0.05)
-DEG_mega_sig = gene_names_race_mega %>% dplyr::filter(adj.P.Val<0.05)
-
-# Compare the sig lists across NIMH, PPM, and the Meta-analysis
-dim(DEG_NIMH_race_sig)
-dim(DEG_PPM_race_sig)
-dim(sig_results)
-dim(sig_results_adj)
-dim(DEG_mega_sig)
-
-```
-
-
-
-######################## Residualized Count Plots Analysis
+######################## Residual Count Plots Analysis
 ```{r Create the vectors of race in NIMH & PPM}
 
 # This is a vector of Black samples in NIMH-HBCC
@@ -280,14 +249,12 @@ plot_all = residuals_met_sheet %>%
 genes_res_race <- plot_gene_residuals_by_race(plot_all, My_Theme, c("#D3D3D3", "#4F4F4F"))
 genes_res_race
 
-ggsave("genes_res_race.png", width = 7, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
-
 ```
 
 
 
 ######################## Genetic Ancestry Vectors vs Race Plots Analysis
-```{r Plot EV.1 vs residualized Counts}
+```{r Plot ancestry (EV.1) versus residual counts}
 
 # Create by factor
 plot_all$Ethnicity <- as.factor(plot_all$Ethnicity)
@@ -312,8 +279,6 @@ scale_fill_manual(values = c("#4F4F4F" = "#4F4F4F", "White" = "#D3D3D3")) +
 
 ancestry_vs_race
 
-#ggsave("ancestry_vs_race.png", width = 6, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
-
 ```
 
 
@@ -328,8 +293,6 @@ mega_ontology_race_list
 # Create the data frame of terms from the list
 top_mega_race_UP <- as.data.frame(mega_ontology_race_list$UP)
 top_mega_race_DOWN <- as.data.frame(mega_ontology_race_list$DOWN)
-
-#ggsave("mega_ontology_race_list.png", width = 9, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
 
 ```
 
@@ -414,7 +377,83 @@ named_corr_race_cohort_stimulus_highlight <- named_corr_race_cohort_stimulus +
 
 named_corr_race_cohort_stimulus_highlight
 
-ggsave("named_corr_race_cohort_stimulus_highlight.png", width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race")
+```
+
+
+
+######################## Overlap between reported race and the CTRA
+```{r TwoWayVenn}
+
+race = DE_mega_race %>% 
+  dplyr::filter(abs(logFC) > 0.25 & adj.P.Val < 0.05) %>% 
+dplyr::filter(!is.na(hgnc_symbol) & hgnc_symbol != "")
+race = c(race$hgnc_symbol)
+
+
+CTRA <- c("IL1A", "IL1B", "IL6", "IL8", "TNF", "PTGS1", 
+                     "PTGS2", "FOS", "FOSB", "FOSL1", "FOSL2", "JUN", 
+                     "JUNB", "JUND", "NFKB1", "NFKB2", "REL", "RELA", 
+                     "RELB", "GBP1", "IFI16", "IFI27", "IFI27L2", "IFI27L2", "IFI30", "IFI35", 
+                "IFI44", "IFI44L", "IFI6", "IFIH1", "IFIT1","IFIT2", "IFIT3","IFIT5", 
+                "IFIT1L", "IFITM1–3", "IFITM2", "IFITM3", "IFITM4P", "IFITM5", "IFNB1", 
+                "IRF2", "IRF7", "IRF8", "MX1", "MX2", "OAS1", "OAS2", "OAS3", "OASL", "IGJ", "IGLL1", 
+                "IGLL3")  
+
+yo <- intersect(CTRA, race) 
+  
+# Merge the vectors of genes into a list
+CTRA_race = list(A = race,
+                 B = CTRA)
+
+category_names <- c("Gene Expression Siganature of Race",
+                    "Controlled Transcriptional Response to Adversity (CTRA)")
+
+
+twoway_venn <- draw_venn(CTRA_race, category_names, 2)
+twoway_venn
+
+```
+
+```{r Shared_CTRA_Race}
+
+# Upregulated
+race_upregulated = DE_mega_race %>% 
+  dplyr::filter(logFC > 0.25 & adj.P.Val < 0.05) %>% 
+    dplyr::filter(!is.na(hgnc_symbol) & hgnc_symbol != "")
+  race_upregulated_genes = c(race_upregulated$hgnc_symbol)
+range(race_upregulated$logFC, na.rm = FALSE)
+
+# Downregulated
+race_downregulated = DE_mega_race %>% 
+  dplyr::filter(logFC < -0.25 & adj.P.Val < 0.05) %>% 
+    dplyr::filter(!is.na(hgnc_symbol) & hgnc_symbol != "")
+  race_downregulated_genes = c(race_downregulated$hgnc_symbol)
+range(race_downregulated$logFC, na.rm = FALSE)
+
+proinflammation <- c("IL1A", "IL1B", "IL6", "IL8", "TNF", "PTGS1", 
+                     "PTGS2", "FOS", "FOSB", "FOSL1", "FOSL2", "JUN", 
+                     "JUNB", "JUND", "NFKB1", "NFKB2", "REL", "RELA", 
+                     "RELB")    
+  
+interferon <- c("GBP1", "IFI16", "IFI27", "IFI27L2", "IFI27L2", "IFI30", "IFI35", 
+                "IFI44", "IFI44L", "IFI6", "IFIH1", "IFIT1","IFIT2", "IFIT3","IFIT5", 
+                "IFIT1L", "IFITM1–3", "IFITM2", "IFITM3", "IFITM4P", "IFITM5", "IFNB1", 
+                "IRF2", "IRF7", "IRF8", "MX1", "MX2", "OAS1", "OAS2", "OAS3", "OASL", "IGJ", "IGLL1", 
+                "IGLL3")  
+
+# Merge the vectors of genes into a list
+genes_cmc = list(A = race_upregulated_genes,
+                 B = race_downregulated_genes,
+                 C = proinflammation,
+                 D = interferon)
+
+category_names <- c("Up in Black",
+                    "Up in White",
+                    "Pro-inflammatory (CTRA up)",
+                    "Interferon (CTRA down)")
+
+fourway_venn <- draw_venn(genes_cmc, category_names, 4)
+fourway_venn
 
 ```
 
@@ -487,85 +526,23 @@ race_genes_mega_coding
 
 
 
-######################## Overlap between reported race and the CTRA
-```{r TwoWayVenn}
+####################### Save the Plots
+```{r Save the Plots}
 
-# Race
-  # Upregulated
-  race = DE_mega_race %>% 
-  dplyr::filter(adj.P.Val < 0.05) %>% dplyr::filter(!is.na(hgnc_symbol) & hgnc_symbol != "")
-  race = c(race_upregulated$hgnc_symbol)
-  range(race_upregulated$logFC, na.rm = FALSE)
+#ggsave("corr_race_cohort.png", width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race")
 
+#ggsave("volcano_mega_race.png", path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis")
 
+# ggsave("genes_res_race.png", width = 7, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
 
-CTRA <- c("IL1A", "IL1B", "IL6", "IL8", "TNF", "PTGS1", 
-                     "PTGS2", "FOS", "FOSB", "FOSL1", "FOSL2", "JUN", 
-                     "JUNB", "JUND", "NFKB1", "NFKB2", "REL", "RELA", 
-                     "RELB", "GBP1", "IFI16", "IFI27", "IFI27L2", "IFI27L2", "IFI30", "IFI35", 
-                "IFI44", "IFI44L", "IFI6", "IFIH1", "IFIT1","IFIT2", "IFIT3","IFIT5", 
-                "IFIT1L", "IFITM1–3", "IFITM2", "IFITM3", "IFITM4P", "IFITM5", "IFNB1", 
-                "IRF2", "IRF7", "IRF8", "MX1", "MX2", "OAS1", "OAS2", "OAS3", "OASL", "IGJ", "IGLL1", 
-                "IGLL3")  
+#ggsave("ancestry_vs_race.png", width = 7, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
 
-yo <- intersect(interferon, race_upregulated$hgnc_symbol) 
-  
-# Merge the vectors of genes into a list
-CTRA_race = list(A = race,
-                 B = CTRA)
+#ggsave("mega_ontology_race_list.png", width = 9, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
 
-category_names <- c("Gene Expression Siganature of Race",
-                    "Controlled Transcriptional Response to Adversity (CTRA)")
+#ggsave("named_corr_race_cohort_immune_highlight.png",width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race")
 
+#ggsave("named_corr_race_cohort_stimulus_highlight.png", width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race")
 
-twoway_venn <- draw_venn(CTRA_race, category_names, 2)
-twoway_venn
+# ggsave("fourway_venn.png", width = 6, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
 
 ```
-
-```{r Shared_CTRA_Race}
-
-# Race
-  # Upregulated
-  race_upregulated = DE_mega_race %>% 
-  dplyr::filter(logFC > 0.25 & adj.P.Val < 0.05) %>% dplyr::filter(!is.na(hgnc_symbol) & hgnc_symbol != "")
-  race_upregulated_genes = c(race_upregulated$hgnc_symbol)
-  range(race_upregulated$logFC, na.rm = FALSE)
-
-  # Downregulated
-  race_downregulated = DE_mega_race %>% 
-    dplyr::filter(logFC < -0.25 & adj.P.Val < 0.05)%>% dplyr::filter(!is.na(hgnc_symbol) & hgnc_symbol != "")
-  race_downregulated_genes = c(race_downregulated$hgnc_symbol)
-  range(race_downregulated$logFC, na.rm = FALSE)
-
-proinflammation <- c("IL1A", "IL1B", "IL6", "IL8", "TNF", "PTGS1", 
-                     "PTGS2", "FOS", "FOSB", "FOSL1", "FOSL2", "JUN", 
-                     "JUNB", "JUND", "NFKB1", "NFKB2", "REL", "RELA", 
-                     "RELB")    
-  
-interferon <- c("GBP1", "IFI16", "IFI27", "IFI27L2", "IFI27L2", "IFI30", "IFI35", 
-                "IFI44", "IFI44L", "IFI6", "IFIH1", "IFIT1","IFIT2", "IFIT3","IFIT5", 
-                "IFIT1L", "IFITM1–3", "IFITM2", "IFITM3", "IFITM4P", "IFITM5", "IFNB1", 
-                "IRF2", "IRF7", "IRF8", "MX1", "MX2", "OAS1", "OAS2", "OAS3", "OASL", "IGJ", "IGLL1", 
-                "IGLL3")  
-
-# Merge the vectors of genes into a list
-genes_cmc = list(A = race_upregulated_genes,
-                 B = race_downregulated_genes,
-                 C = proinflammation,
-                 D = interferon)
-
-category_names <- c("Up in Black",
-                    "Up in White",
-                    "Pro-inflammatory (CTRA up)",
-                    "Interferon (CTRA down)")
-
-fourway_venn <- draw_venn(genes_cmc, category_names, 4)
-fourway_venn
-
-ggsave("fourway_venn.png", width = 6, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
-
-```
-
-
-

@@ -207,7 +207,7 @@ box.padding = 0.8, point.padding = 2,
                     segment.curvature = -0.1, segment.linetype = 1,
                     segment.angle = 20, arrow = arrow(
       length = unit(0.01, "npc"), type = "closed", ends = "last"))
-return(volcano_plot_named)
+return(volcano_plot)
 }
 
 ```
