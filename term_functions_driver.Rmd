@@ -298,7 +298,6 @@ clean_dataframe_ppm <- function(df, sample_id_colname = "SampleID", gene_id_coln
 
 
 
-
 ######################## RESIDUAL PLOTTING
 ```{r plot_gene_residuals_by_race}
 
@@ -334,7 +333,6 @@ plot_gene_residuals_by_race <- function(df, theme, fill_values) {
 }
 
 ```
-
 
 
 
@@ -451,7 +449,6 @@ return(treemapPlot(reducedTerms))
 }
 
 ```
-
 
 
 
