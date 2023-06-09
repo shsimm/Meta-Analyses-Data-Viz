@@ -290,9 +290,9 @@ inter_gene_residuals_stat_ancestry
 ####################### Save the Plots
 ```{r Save the Plots}
 
-#ggsave("corr_interaction_cohort.png", width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Interaction")
+ggsave("corr_interaction_cohort.png", width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Interaction")
 
-#ggsave('volcano_mega_interaction.png', path = "~/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Interaction/Mega-Analysis")
+ggsave('volcano_mega_interaction.png', path = "~/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Interaction/Mega-Analysis")
 
 #ggsave("genes_res_inter.png", width = 6, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Interaction/Mega-Analysis")
 

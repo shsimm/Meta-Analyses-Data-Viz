@@ -339,8 +339,6 @@ named_corr_race_cohort_immune_highlight <- named_corr_race_cohort_immune +
 
 named_corr_race_cohort_immune_highlight 
 
-ggsave("named_corr_race_cohort_immune_highlight.png",width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race")
-
 ```
 
 ```{r Response to stimulus}
