@@ -1,14 +1,11 @@
 ---
 title: "term_functions"
-author: "Shu'ayb Simmons"
+author: "Shay Simmons"
 date: "2023-02-04"
 output: html_document
 ---
 
-Shu'ayb's frequently used functions; used across all factor levels! 
-
-
-######################## META-ANALYSIS functions
+######################## Meta-Analysis functions
 ```{r cmc_meta_analysis -- function to conduct a meta-analysis}
 
 # 2 arguments
