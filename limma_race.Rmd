@@ -455,7 +455,27 @@ fourway_venn
 
 ```
 
+```{r Hypergeometric_Testing}
 
+# Step 1: Calculate the number of overlapping elements
+overlap_count <- length(intersect(CTRA, DE_mega_race$hgnc_symbol))
+
+# Step 2: Calculate the total number of elements in each vector
+total_ctra <- length(CTRA)
+total_hgnc_symbol <- length(DE_mega_race$hgnc_symbol)
+
+# Step 3: Calculate the p-value using the hypergeometric test
+p_value <- phyper(overlap_count - 1, total_ctra, total_hgnc_symbol, length(unique(DE_mega_race$hgnc_symbol)))
+
+# Step 4: Interpret the p-value and print the result along with the p-value
+if (p_value < 0.05) {
+  print("The overlap between the two vectors is statistically significant.")
+} else {
+  print("The overlap between the two vectors is not statistically significant.")
+}
+cat("p-value:", p_value, "\n")
+
+```
 
 ######################## Pretin Coding genes across cohort -- this is so weird!
 ```{r NIMH-HBCC}
@@ -526,12 +546,13 @@ race_genes_mega_coding
 
 ####################### Save the Plots
 ```{r Save the Plots}
-
 #ggsave("corr_race_cohort.png", width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race")
 
 #ggsave("volcano_mega_race.png", path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis")
 
 # ggsave("genes_res_race.png", width = 7, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
+
+#ggsave("volcano_mega_race_ctra.png", width = 7, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
 
 #ggsave("ancestry_vs_race.png", width = 7, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
 
