@@ -362,12 +362,12 @@ named_corr_race_cohort_stimulus_highlight
 ######################## Overlap between reported race and the CTRA
 ```{r TwoWayVenn}
 
-race = DE_mega_race %>% 
+reported_race_raw = DE_mega_race %>% 
   dplyr::filter(abs(logFC) > 0.25 & adj.P.Val < 0.05) %>% 
 dplyr::filter(!is.na(hgnc_symbol) & hgnc_symbol != "")
-race = c(race$hgnc_symbol)
+reported_race_clean = c(reported_race_raw$hgnc_symbol)
 
-
+# Create a vector of the CTRA gene set
 CTRA <- c("IL1A", "IL1B", "IL6", "IL8", "TNF", "PTGS1", 
                      "PTGS2", "FOS", "FOSB", "FOSL1", "FOSL2", "JUN", 
                      "JUNB", "JUND", "NFKB1", "NFKB2", "REL", "RELA", 
@@ -376,18 +376,16 @@ CTRA <- c("IL1A", "IL1B", "IL6", "IL8", "TNF", "PTGS1",
                 "IFIT1L", "IFITM1–3", "IFITM2", "IFITM3", "IFITM4P", "IFITM5", "IFNB1", 
                 "IRF2", "IRF7", "IRF8", "MX1", "MX2", "OAS1", "OAS2", "OAS3", "OASL", "IGJ", "IGLL1", 
                 "IGLL3")  
-
-yo <- intersect(CTRA, race) 
   
 # Merge the vectors of genes into a list
-CTRA_race = list(A = race,
+CTRA_reported_race = list(A = reported_race_clean,
                  B = CTRA)
 
-category_names <- c("Gene Expression Siganature of Race",
+category_names <- c("Gene Expression Siganature of Reported Race",
                     "Controlled Transcriptional Response to Adversity (CTRA)")
 
 
-twoway_venn <- draw_venn(CTRA_race, category_names, 2)
+twoway_venn <- draw_venn(CTRA_reported_race, category_names, 2)
 twoway_venn
 
 ```
@@ -425,8 +423,8 @@ genes_cmc = list(A = race_upregulated_genes,
                  C = proinflammation,
                  D = interferon)
 
-category_names <- c("Up in Black",
-                    "Up in White",
+category_names <- c("Up in Black-Reported Samples",
+                    "Up in White-Reported Samples",
                     "Pro-inflammatory (CTRA up)",
                     "Interferon (CTRA down)")
 
