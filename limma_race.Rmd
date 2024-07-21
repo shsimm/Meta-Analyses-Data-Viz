@@ -187,35 +187,15 @@ meta_race_genes <- as.data.frame(volcano_meta_race$plot_env$top_50_genes)
 
 
 ######################## Residual Count Plots Analysis
-```{r Create the vectors of race in NIMH & PPM}
-
-# This is a vector of Black samples in NIMH-HBCC
-black_people_NIMH <- METADATA %>% dplyr::filter(Ethnicity == "AA" & Cohort == "NIMH-HBCC")
-  black_samples_NIMH <- c(black_people_NIMH$SampleID)
-# This is a vector of white samples in NIMH-HBCC
-white_people_NIMH <- METADATA %>% dplyr::filter(Ethnicity == "C" & Cohort == "NIMH-HBCC")
-  white_samples_NIMH <- c(white_people_NIMH$SampleID)
-  
-# This is a vector of Black samples in NIMH-HBCC
-black_people_PPM <- METADATA %>% dplyr::filter(Ethnicity == "AA" & Cohort == "MSSM-Penn-Pitt")
-  black_samples_PPM <- c(black_people_PPM$SampleID)
-# This is a vector of white samples in NIMH-HBCC
-white_people_PPM <- METADATA %>% dplyr::filter(Ethnicity == "C" & Cohort == "MSSM-Penn-Pitt")
-  white_samples_PPM <- c(white_people_PPM$SampleID)
-
-```
-
 ```{r Create and clean the residual dfs}
 
 # Clean the data frame for NIMH-HBCC
 residuals_race_NIMH_raw = as.data.frame(resid.add$Ethnicity$`NIMH-HBCC`)
 residuals_race_NIMH_cleaned <- clean_dataframe_nimh(residuals_race_NIMH_raw)
-colnames(residuals_race_NIMH_cleaned)
 
 # Clean the data frame for MSSM-Penn-Pitt
 residuals_race_PPM_raw = as.data.frame(resid.add$Ethnicity$`MSSM-Penn-Pitt`)
 residuals_race_PPM_cleaned <- clean_dataframe_ppm(residuals_race_PPM_raw)
-colnames(residuals_race_PPM_cleaned)
 
 ```
 
@@ -477,91 +457,3 @@ cat("p-value:", p_value, "\n")
 
 ```
 
-######################## Pretin Coding genes across cohort -- this is so weird!
-```{r NIMH-HBCC}
-
-biotype_counts_NIMH <- as.data.frame(table(DEG_NIMH_race$gene_biotype))
-
-biotype_counts_NIMH$Cohort<- "NIMH-HBCC"
-
-# Keep only biotypes with at least 100 genes -- or else it gets messy
-#biotype_counts_NIMH <- biotype_counts_NIMH[biotype_counts_NIMH$Freq >= 100,]
-biotype_counts_NIMH = dplyr::rename(biotype_counts_NIMH, Gene_Biotype = Var1)
-biotype_counts_NIMH = dplyr::rename(biotype_counts_NIMH, Gene_Number = Freq)
-unique(biotype_counts_NIMH$Gene_Biotype)
-
-# Recode the values for better plot graphics  
-biotype_counts_NIMH = biotype_counts_NIMH %>% mutate(Gene_Biotype = recode(Gene_Biotype,
-                               lncRNA = "long-non coding RNA",
-                               processed_pseudogene = "processed pseudogene",
-                               protein_coding = "protein coding",
-                               TEC = "TBD",
-                               transcribed_processed_pseudogene = "transcribed processed pseudogene",
-                               transcribed_unprocessed_pseudogene = "transcribed unproc pseudogene",
-                               unprocessed_pseudogene = "unprocessed pseudogene"))
-biotype_counts_NIMH = biotype_counts_NIMH %>% dplyr::arrange(desc(Gene_Number))
-
-```
-
-```{r Penn-Pitt-MSSM}
-
-biotype_counts_PPM <- as.data.frame(table(DEG_PPM_race$gene_biotype))
-biotype_counts_PPM$Cohort<- "Penn-Pitt-MSSM"
-
-#biotype_counts_PPM <- biotype_counts_PPM[biotype_counts_PPM$Freq >= 100,]
-biotype_counts_PPM = dplyr::rename(biotype_counts_PPM, Gene_Biotype = Var1)
-biotype_counts_PPM = dplyr::rename(biotype_counts_PPM, Gene_Number = Freq)
-unique(biotype_counts_PPM$Gene_Biotype)
-
-# Recode the values for better plot graphics  
-biotype_counts_PPM = biotype_counts_PPM %>% dplyr::mutate(Gene_Biotype = recode(Gene_Biotype,
-                               lncRNA = "long-non coding RNA",
-                               processed_pseudogene = "processed pseudogene",
-                               protein_coding = "protein coding",
-                               TEC = "TBD",
-                               transcribed_processed_pseudogene = "transcribed processed pseudogene",
-                               transcribed_unprocessed_pseudogene = "transcribed unproc pseudogene",
-                               unprocessed_pseudogene = "unprocessed pseudogene"))
-biotype_counts_PPM = biotype_counts_PPM %>% dplyr::arrange(desc(Gene_Number))
-
-```
-
-```{r plotting biotype counts}
-
-biotype_counts = rbind(biotype_counts_NIMH, biotype_counts_PPM)
-
-race_genes_mega_coding <- ggplot(data = biotype_counts) + 
-   geom_col(aes(x=reorder(Gene_Biotype, + Gene_Number), y=Gene_Number, fill = Cohort), 
-            stat = "identity", position = "dodge") + theme_classic() +
-    theme(legend.position = "none") + theme(axis.text.x = element_text(angle = 90)) + 
-  scale_fill_manual(values = c("#9BC53D", "#FFBF00"))+
-  xlab("Gene Biotype") + ylab("Number of genes") 
-
-      
-race_genes_mega_coding
-
-```
-
-
-
-####################### Save the Plots
-```{r Save the Plots}
-#ggsave("corr_race_cohort.png", width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race")
-
-#ggsave("volcano_mega_race.png", path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis")
-
-# ggsave("genes_res_race.png", width = 7, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
-
-#ggsave("volcano_mega_race_ctra.png", width = 7, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
-
-#ggsave("ancestry_vs_race.png", width = 7, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
-
-#ggsave("mega_ontology_race_list.png", width = 9, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
-
-#ggsave("named_corr_race_cohort_immune_highlight.png",width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race")
-
-#ggsave("named_corr_race_cohort_stimulus_highlight.png", width = 8, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race")
-
-# ggsave("fourway_venn.png", width = 6, height = 7, path = "/Users/shuaybsimmons/Desktop/School/UofT MSc Medical Science/Research/Thesis Research/Plots/Race/Mega-Analysis/")
-
-```
