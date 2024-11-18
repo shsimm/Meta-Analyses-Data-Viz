@@ -4,7 +4,6 @@ output: html_document
 date: "2022-10-24"
 ---
 
-
 ######################## Work Space Setup
 ```{r Required Packages}
 
@@ -264,7 +263,7 @@ ancestry_vs_race
 
 
 ######################## Gene Ontology Enrichment Analysis 
-```{r directional mega-analysis}
+```{r Directional mega-analysis}
 
 # Run the directional ontology analysis
 mega_ontology_race_list <- directional_GO_analysis(DE_mega_race, LFC_threshold = 0.25)
@@ -276,7 +275,7 @@ top_mega_race_DOWN <- as.data.frame(mega_ontology_race_list$DOWN)
 
 ```
 
-```{r hierarchal mega-analysis}
+```{r Hierarchal mega-analysis}
 
 # Run the hierarchical ontology analysis
 hierarchy_UP <- runGOAnalysis(top_mega_race_UP)
@@ -390,7 +389,7 @@ twoway_venn
 
 ```
 
-```{r Shared_CTRA_Race}
+```{r Shared_CTRA_Reported_Race}
 
 # Upregulated
 race_upregulated = DE_mega_race %>% 

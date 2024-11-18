@@ -13,7 +13,7 @@ output: html_document
 # 2 -- vector of genes (remember they must be shared across cohort)
 
 # Will return a dataframe of genes w FDR, gene names, descriptions, & LFC
-# parallel processing to speed things up (;
+# I've included parallel processing to speed things up
 
 start_time <- Sys.time()
 cmc_meta_analysis <- function(meta_mega, genes){
@@ -129,6 +129,11 @@ box.padding = 0.72, point.padding = 2,
 
 ```{r make_volcano_plot_dx}
 
+# 3 arguments 
+# 1 -- Data frame with P-val, FDR and logFC
+# 2 -- x limit for your graph
+# 3 -- y limit for your graph
+
 make_volcano_plot_dx <- function(X, x_lim, y_lim) {
   
 X$direction <- "NO"
@@ -178,6 +183,11 @@ return(volcano_plot_named)
 
 ```{r make_volcano_plot_interaction}
 
+# 3 arguments 
+# 1 -- Data frame with P-val, FDR and logFC
+# 2 -- x limit for your graph
+# 3 -- y limit for your graph
+
 make_volcano_plot_interaction <- function(X, x_lim, y_lim) {
 X$direction <- "NO"
 X$direction[X$logFC < -0.25 & X$adj.P.Val < 0.05] <- "DOWN"
@@ -210,6 +220,11 @@ return(volcano_plot)
 ```
 
 ```{r make_volcano_plot_CTRA}
+
+# 3 arguments 
+# 1 -- Data frame with P-val, FDR and logFC
+# 2 -- x limit for your graph
+# 3 -- y limit for your graph
 
 make_volcano_plot_CTRA <- function(X, x_lim, y_lim) {
   
@@ -251,9 +266,19 @@ return(volcano_plot_named)
 
 
 ######################## CLEANING RESIDUAL DATAFRAMES
+```{r get_sample_ids -- creates vectors of sample IDs based on reported race and cohort}
+
+get_sample_ids <- function(ethnicity, cohort) {
+  METADATA %>%
+    dplyr::filter(Ethnicity == ethnicity & Cohort == cohort) %>%
+    pull(SampleID)
+}
+
+```
+
 ```{r clean_dataframe_nimh -- cleans NIMH residuals}
 
-# This function cleans nimh residuals into 4 columns ; Cohort, Gene_Id, Res_count, and Sample ID
+# This function cleans NIMH residuals into 4 columns ; Cohort, Gene_Id, Res_count, and Sample ID
 
 # 1 argument -- a data frame with row = gene & column = sample
 
@@ -277,7 +302,9 @@ clean_dataframe_nimh <- function(df, sample_id_colname = "SampleID",
 
 ```{r clean_dataframe_ppm -- cleans PPM residuals}
 
-## Ibid ^^
+# This function cleans PPM residuals into 4 columns ; Cohort, Gene_Id, Res_count, and Sample ID
+
+# 1 argument -- a data frame with row = gene & column = sample
 
 clean_dataframe_ppm <- function(df, sample_id_colname = "SampleID", gene_id_colname = "Gene_ID", res_counts_colname = "Res_counts"){
   # Pivot the data frame
