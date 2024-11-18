@@ -1,7 +1,7 @@
 ---
 title: "limma_race"
+author: "Shay Simmons"
 output: html_document
-date: "2022-10-24"
 ---
 
 ######################## Work Space Setup

@@ -1,10 +1,7 @@
 ---
 title: "limma_dx.Rmd"
-author: "Shu'ayb Simmons"
-date: "2022-12-05"
+author: "Shay Simmons"
 output: html_document
-editor_options: 
-  chunk_output_type: inline
 ---
 
 
